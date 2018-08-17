@@ -1,0 +1,12 @@
+[package]
+name = "amethyst-imgui"
+version = "0.1.0"
+
+[dependencies]
+amethyst = "0.8.0"
+gfx = "0.17.1"
+glsl-layout = "0.1.1"
+
+glium = { version = "0.22", default-features = true }
+imgui = { git = "https://github.com/Gekkio/imgui-rs" }
+imgui-gfx-renderer = { git = "https://github.com/Gekkio/imgui-rs" }
