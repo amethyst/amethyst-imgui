@@ -46,18 +46,24 @@ struct RendererThing {
 	mesh: Mesh,
 }
 
-pub struct DrawUi<S: for<'pass_data> shred::SystemData<'pass_data> + Send> {
+pub struct DrawUi<S>
+where
+	S: for<'pd1> shred::SystemData<'pd1> + Send,
+{
 	imgui: Option<ImGui>,
 	renderer: Option<RendererThing>,
-	run_ui: fn(&mut imgui::Ui, S),
+	run_ui: for<'ui1, 'pd2> Fn(&mut imgui::Ui<'ui1>, S),
 }
 
-impl<S: for<'pass_data> shred::SystemData<'pass_data> + Send> DrawUi<S> {
-	pub fn new(run_ui: fn(&mut imgui::Ui, S)) -> Self {
+impl<S> DrawUi<S>
+where
+	S: for<'pd2> shred::SystemData<'pd2> + Send,
+{
+	pub fn new<F: for<'ui2, 'pd3> Fn(&mut imgui::Ui<'ui2>, S)>(run_ui: F) -> Self {
 		Self {
 			imgui: None,
 			renderer: None,
-			run_ui
+			run_ui,
 		}
 	}
 }
@@ -70,16 +76,22 @@ pub struct ImguiState {
 
 type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
 
-impl<'a, S: for<'pass_data> shred::SystemData<'pass_data> + Send> PassData<'a> for DrawUi<S> {
+impl<'pd4, S> PassData<'pd4> for DrawUi<S>
+where
+	S: shred::SystemData<'pd4> + Send,
+{
 	type Data = (
-		shred::ReadExpect<'a, amethyst::renderer::ScreenDimensions>,
-		shred::Read<'a, amethyst::core::timing::Time>,
-		shred::Write<'a, Option<ImguiState>>,
+		shred::ReadExpect<'pd4, amethyst::renderer::ScreenDimensions>,
+		shred::Read<'pd4, amethyst::core::timing::Time>,
+		shred::Write<'pd4, Option<ImguiState>>,
 		S,
 	);
 }
 
-impl<S: for<'pass_data> shred::SystemData<'pass_data> + Send> Pass for DrawUi<S> {
+impl<S> Pass for DrawUi<S>
+where
+	S: for<'pd5> shred::SystemData<'pd5> + Send,
+{
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect> {
 		let mut imgui = ImGui::init();
 		{
@@ -195,12 +207,12 @@ impl<S: for<'pass_data> shred::SystemData<'pass_data> + Send> Pass for DrawUi<S>
 			.build()
 	}
 
-	fn apply<'ui, 'pass_data: 'ui>(
+	fn apply<'ui, 'apply_pd: 'ui>(
 		&'ui mut self,
 		encoder: &mut Encoder,
 		effect: &mut Effect,
 		mut factory: amethyst::renderer::Factory,
-		(screen_dimensions, time, mut imgui_state, ui_data): <Self as PassData<'pass_data>>::Data,
+		(screen_dimensions, time, mut imgui_state, ui_data): <Self as PassData<'apply_pd>>::Data,
 	) {
 		let imgui_state = imgui_state.get_or_insert_with(|| ImguiState {
 			imgui: self.imgui.take().unwrap(),
