@@ -48,18 +48,18 @@ struct RendererThing {
 
 pub struct DrawUi<S>
 where
-	S: for<'pd1> shred::SystemData<'pd1> + Send,
+	S: for<'pd> shred::SystemData<'pd>,
 {
 	imgui: Option<ImGui>,
 	renderer: Option<RendererThing>,
-	run_ui: for<'ui1, 'pd2> Fn(&mut imgui::Ui<'ui1>, S),
+	run_ui: fn(&mut imgui::Ui, &S),
 }
 
 impl<S> DrawUi<S>
 where
-	S: for<'pd2> shred::SystemData<'pd2> + Send,
+	S: for<'pd> shred::SystemData<'pd>,
 {
-	pub fn new<F: for<'ui2, 'pd3> Fn(&mut imgui::Ui<'ui2>, S)>(run_ui: F) -> Self {
+	pub fn new(run_ui: fn(&mut imgui::Ui, &S)) -> Self {
 		Self {
 			imgui: None,
 			renderer: None,
@@ -78,7 +78,7 @@ type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
 
 impl<'pd4, S> PassData<'pd4> for DrawUi<S>
 where
-	S: shred::SystemData<'pd4> + Send,
+	S: for <'a> shred::SystemData<'a> + Send,
 {
 	type Data = (
 		shred::ReadExpect<'pd4, amethyst::renderer::ScreenDimensions>,
@@ -245,7 +245,7 @@ where
 		);
 		{
 			let mut ui = imgui.frame(FrameSize::new(f64::from(width), f64::from(height), 1.), time.delta_seconds());
-			(self.run_ui)(&mut ui, ui_data);
+			(self.run_ui)(&mut ui, &ui_data);
 			renderer_thing.renderer.render(ui, &mut factory, encoder).unwrap();
 		}
 
