@@ -50,6 +50,8 @@ dependencies = [
  "glsl-layout 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "imgui 0.0.21-pre (git+https://github.com/Gekkio/imgui-rs)",
  "imgui-gfx-renderer 0.0.21-pre (git+https://github.com/Gekkio/imgui-rs)",
+ "shred 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "shred-derive 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

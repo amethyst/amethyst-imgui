@@ -3,9 +3,10 @@ extern crate amethyst;
 extern crate gfx;
 #[macro_use] extern crate glsl_layout;
 extern crate imgui_gfx_renderer;
+extern crate shred;
 
 use amethyst::{
-	core::{cgmath, specs::prelude::*},
+	core::{cgmath},
 	renderer::{
 		error::Result,
 		pipe::{
@@ -45,38 +46,40 @@ struct RendererThing {
 	mesh: Mesh,
 }
 
-#[derive(Default)]
-pub struct DrawUi {
+pub struct DrawUi<S: for<'pass_data> shred::SystemData<'pass_data> + Send> {
 	imgui: Option<ImGui>,
 	renderer: Option<RendererThing>,
+	run_ui: fn(&mut imgui::Ui, S),
 }
 
-impl DrawUi {
-	pub fn new() -> Self {
-		Self::default()
+impl<S: for<'pass_data> shred::SystemData<'pass_data> + Send> DrawUi<S> {
+	pub fn new(run_ui: fn(&mut imgui::Ui, S)) -> Self {
+		Self {
+			imgui: None,
+			renderer: None,
+			run_ui
+		}
 	}
 }
 
 pub struct ImguiState {
-	pub run_ui: Option<Box<dyn Fn(&mut imgui::Ui<'_>) + Sync + Send>>,
 	imgui: ImGui,
 	mouse_state: MouseState,
 	size: (u16, u16),
 }
 
-type UiPassData<'pass_data> = (
-	ReadExpect<'pass_data, amethyst::renderer::ScreenDimensions>,
-	Read<'pass_data, amethyst::core::timing::Time>,
-	Write<'pass_data, Option<ImguiState>>,
-);
-
-impl<'pass_data> PassData<'pass_data> for DrawUi {
-	type Data = UiPassData<'pass_data>;
-}
-
 type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
 
-impl Pass for DrawUi {
+impl<'a, S: for<'pass_data> shred::SystemData<'pass_data> + Send> PassData<'a> for DrawUi<S> {
+	type Data = (
+		shred::ReadExpect<'a, amethyst::renderer::ScreenDimensions>,
+		shred::Read<'a, amethyst::core::timing::Time>,
+		shred::Write<'a, Option<ImguiState>>,
+		S,
+	);
+}
+
+impl<S: for<'pass_data> shred::SystemData<'pass_data> + Send> Pass for DrawUi<S> {
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect> {
 		let mut imgui = ImGui::init();
 		{
@@ -197,12 +200,11 @@ impl Pass for DrawUi {
 		encoder: &mut Encoder,
 		effect: &mut Effect,
 		mut factory: amethyst::renderer::Factory,
-		(screen_dimensions, time, mut imgui_state): UiPassData<'pass_data>,
+		(screen_dimensions, time, mut imgui_state, ui_data): <Self as PassData<'pass_data>>::Data,
 	) {
 		let imgui_state = imgui_state.get_or_insert_with(|| ImguiState {
 			imgui: self.imgui.take().unwrap(),
 			mouse_state: MouseState::default(),
-			run_ui: None,
 			size: (1024, 1024),
 		});
 		let imgui = &mut imgui_state.imgui;
@@ -230,11 +232,9 @@ impl Pass for DrawUi {
 			[0., 0., 0., 0.],
 		);
 		{
-			if let Some(ref run_ui) = imgui_state.run_ui {
-				let mut ui = imgui.frame(FrameSize::new(f64::from(width), f64::from(height), 1.), time.delta_seconds());
-				run_ui(&mut ui);
-				renderer_thing.renderer.render(ui, &mut factory, encoder).unwrap();
-			}
+			let mut ui = imgui.frame(FrameSize::new(f64::from(width), f64::from(height), 1.), time.delta_seconds());
+			(self.run_ui)(&mut ui, ui_data);
+			renderer_thing.renderer.render(ui, &mut factory, encoder).unwrap();
 		}
 
 		{
