@@ -3,9 +3,9 @@ extern crate amethyst;
 extern crate gfx;
 #[macro_use] extern crate glsl_layout;
 extern crate imgui_gfx_renderer;
-extern crate shred;
 
 use amethyst::{
+	ecs::prelude::*,
 	core::{cgmath},
 	renderer::{
 		error::Result,
@@ -48,7 +48,7 @@ struct RendererThing {
 
 pub struct DrawUi<S>
 where
-	S: for<'pd> shred::SystemData<'pd>,
+	S: for<'system_data> SystemData<'system_data>,
 {
 	imgui: Option<ImGui>,
 	renderer: Option<RendererThing>,
@@ -57,7 +57,7 @@ where
 
 impl<S> DrawUi<S>
 where
-	S: for<'pd> shred::SystemData<'pd>,
+	S: for<'system_data> SystemData<'system_data>,
 {
 	pub fn new(run_ui: fn(&mut imgui::Ui, &S)) -> Self {
 		Self {
@@ -76,21 +76,21 @@ pub struct ImguiState {
 
 type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
 
-impl<'pd4, S> PassData<'pd4> for DrawUi<S>
+impl<'system_data, S> PassData<'system_data> for DrawUi<S>
 where
-	S: for <'a> shred::SystemData<'a> + Send,
+	S: for <'a> SystemData<'a> + Send,
 {
 	type Data = (
-		shred::ReadExpect<'pd4, amethyst::renderer::ScreenDimensions>,
-		shred::Read<'pd4, amethyst::core::timing::Time>,
-		shred::Write<'pd4, Option<ImguiState>>,
+		ReadExpect<'system_data, amethyst::renderer::ScreenDimensions>,
+		Read<'system_data, amethyst::core::timing::Time>,
+		Write<'system_data, Option<ImguiState>>,
 		S,
 	);
 }
 
 impl<S> Pass for DrawUi<S>
 where
-	S: for<'pd5> shred::SystemData<'pd5> + Send,
+	S: for<'system_data> SystemData<'system_data> + Send,
 {
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect> {
 		let mut imgui = ImGui::init();
