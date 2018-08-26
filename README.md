@@ -1,21 +1,20 @@
 # Usage:
-1. Add `.with_pass(amethyst_imgui::DrawUi::new())` to your Stage
-1. Add this to your `handle_event`:
+1. Add this to your Stage:
 ```rust
-	let imgui_state: &mut Option<amethyst_imgui::ImguiState> = &mut data.world.write_resource::<Option<amethyst_imgui::ImguiState>>();
-	if let Some(ref mut imgui_state) = imgui_state {
-		amethyst_imgui::handle_imgui_events(imgui_state, &event);
+	.with_pass(amethyst_imgui::DrawUi::default())
+```
+2. Add this to your `handle_event`:
+```rust
+	amethyst_imgui::handle_imgui_events(data.world, &event);
+```
+3. Add this to the beginning of your main `update`:
+```rust
+	let ui = amethyst_imgui::open_frame(state.world);
+	if let Some(ui) = ui {
+		ui.show_demo_window(&mut true);
 	}
 ```
-1. Add this to your main `update`:
+4. Add this to the end of your main `update`:
 ```rust
-	let imgui_state: &mut Option<amethyst_imgui::ImguiState> = &mut state.world.write_resource::<Option<amethyst_imgui::ImguiState>>();
-	if let Some(ref mut imgui_state) = imgui_state {
-		imgui_state.run_ui = Some(Box::new(move |ui: &mut imgui::Ui<'_>| {
-			ui.show_demo_window(&mut true);
-			ui.window(im_str!("TEST WINDOW WOOO")).build(|| {
-				ui.text(im_str!("{}", seconds));
-			});
-		}));
-	}
+	if let Some(ui) = ui { amethyst_imgui::close_frame(ui) }
 ```
