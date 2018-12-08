@@ -1,6 +1,11 @@
 [package]
 name = "amethyst-imgui"
 version = "0.1.0"
+description = "imgui library for amethyst"
+license = "CC0-1.0"
+authors = ["Awpteamoose <cargo@awpteamoose.my.to>"]
+repository = "https://github.com/Awpteamoose/amethyst-imgui"
+readme = "README.md"
 
 [dependencies]
 amethyst = "0.10"
