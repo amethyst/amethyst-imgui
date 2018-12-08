@@ -1,13 +1,13 @@
 pub extern crate imgui;
 extern crate amethyst;
 extern crate gfx;
-#[macro_use] extern crate glsl_layout;
+extern crate glsl_layout;
 extern crate imgui_gfx_renderer;
 
 use amethyst::{
 	ecs::shred::FetchMut,
 	ecs::prelude::*,
-	core::{cgmath},
+	core::nalgebra::{Vector2, Vector3},
 	renderer::{
 		error::Result,
 		pipe::{
@@ -140,28 +140,28 @@ impl Pass for DrawUi {
 
 		let data = vec![
 			PosTex {
-				position: [0., 1., 0.],
-				tex_coord: [0., 0.],
+				position: Vector3::new(0., 1., 0.),
+				tex_coord: Vector2::new(0., 0.),
 			},
 			PosTex {
-				position: [1., 1., 0.],
-				tex_coord: [1., 0.],
+				position: Vector3::new(1., 1., 0.),
+				tex_coord: Vector2::new(1., 0.),
 			},
 			PosTex {
-				position: [1., 0., 0.],
-				tex_coord: [1., 1.],
+				position: Vector3::new(1., 0., 0.),
+				tex_coord: Vector2::new(1., 1.),
 			},
 			PosTex {
-				position: [0., 1., 0.],
-				tex_coord: [0., 0.],
+				position: Vector3::new(0., 1., 0.),
+				tex_coord: Vector2::new(0., 0.),
 			},
 			PosTex {
-				position: [1., 0., 0.],
-				tex_coord: [1., 1.],
+				position: Vector3::new(1., 0., 0.),
+				tex_coord: Vector2::new(1., 1.),
 			},
 			PosTex {
-				position: [0., 0., 0.],
-				tex_coord: [0., 1.],
+				position: Vector3::new(0., 0., 0.),
+				tex_coord: Vector2::new(0., 1.),
 			},
 		];
 
@@ -201,7 +201,7 @@ impl Pass for DrawUi {
 		let renderer_thing = self.renderer.as_mut().unwrap();
 
 		let vertex_args = VertexArgs {
-			proj_vec: cgmath::vec4(2. / width, -2. / height, 0., 1.).into(),
+			proj_vec: [2. / width, -2. / height, 0., 1.].into(),
 			coord: [0., 0.].into(),
 			dimension: [width, height].into(),
 		};
@@ -347,7 +347,7 @@ pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::rende
 				}
 			},
 			WindowEvent::CursorMoved { position: pos, .. } => {
-				mouse_state.pos = (pos.0 as i32, pos.1 as i32);
+				mouse_state.pos = (pos.x as i32, pos.y as i32);
 			},
 			WindowEvent::MouseInput { state, button, .. } => match button {
 				MouseButton::Left => mouse_state.pressed.0 = *state == ElementState::Pressed,
@@ -355,15 +355,10 @@ pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::rende
 				MouseButton::Middle => mouse_state.pressed.2 = *state == ElementState::Pressed,
 				_ => {},
 			},
-			WindowEvent::MouseWheel {
-				delta: MouseScrollDelta::LineDelta(_, y),
-				phase: TouchPhase::Moved,
-				..
-			} | WindowEvent::MouseWheel {
-				delta: MouseScrollDelta::PixelDelta(_, y),
-				phase: TouchPhase::Moved,
-				..
-			} => mouse_state.wheel = *y,
+			WindowEvent::MouseWheel { delta, phase: TouchPhase::Moved, .. } => match delta {
+				MouseScrollDelta::LineDelta(_, y) => mouse_state.wheel = *y,
+				MouseScrollDelta::PixelDelta(lp) => mouse_state.wheel = lp.y as f32,
+			},
 			ReceivedCharacter(c) => imgui.add_input_character(*c),
 			_ => (),
 		}
