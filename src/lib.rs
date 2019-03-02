@@ -8,8 +8,8 @@ use amethyst::{
 	ecs::shred::FetchMut,
 	ecs::prelude::*,
 	core::nalgebra::{Vector2, Vector3},
+	error::Error,
 	renderer::{
-		error::Result,
 		pipe::{
 			pass::{Pass, PassData},
 			Effect,
@@ -69,7 +69,7 @@ impl<'a> PassData<'a> for DrawUi {
 }
 
 impl Pass for DrawUi {
-	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect> {
+	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect, Error> {
 		let mut imgui = ImGui::init();
 		{
 			// Fix incorrect colors with sRGB framebuffer
@@ -288,16 +288,17 @@ pub fn close_frame(ui: &imgui::Ui) {
 	};
 }
 
-pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::renderer::Event) {
+pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::StateEvent) {
 	use amethyst::{
-		renderer::{
-			ElementState,
-			Event,
-			MouseButton,
-			VirtualKeyCode as VK,
-			WindowEvent::{self, ReceivedCharacter},
-		},
-		winit::{MouseScrollDelta, TouchPhase},
+		StateEvent,
+		winit::{
+				WindowEvent,
+				MouseScrollDelta,
+				ElementState,
+				Event,
+				MouseButton,
+				VirtualKeyCode as VK,
+				TouchPhase},
 	};
 
 	let resources = std::borrow::Borrow::<amethyst::ecs::Resources>::borrow(world);
@@ -315,52 +316,54 @@ pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::rende
 	let imgui = &mut imgui_state.imgui;
 	let mouse_state = &mut imgui_state.mouse_state;
 
-	if let Event::WindowEvent { event, .. } = event {
-		match event {
-			WindowEvent::KeyboardInput { input, .. } => {
-				let pressed = input.state == ElementState::Pressed;
-				match input.virtual_keycode {
-					Some(VK::Tab) => imgui.set_key(0, pressed),
-					Some(VK::Left) => imgui.set_key(1, pressed),
-					Some(VK::Right) => imgui.set_key(2, pressed),
-					Some(VK::Up) => imgui.set_key(3, pressed),
-					Some(VK::Down) => imgui.set_key(4, pressed),
-					Some(VK::PageUp) => imgui.set_key(5, pressed),
-					Some(VK::PageDown) => imgui.set_key(6, pressed),
-					Some(VK::Home) => imgui.set_key(7, pressed),
-					Some(VK::End) => imgui.set_key(8, pressed),
-					Some(VK::Delete) => imgui.set_key(9, pressed),
-					Some(VK::Back) => imgui.set_key(10, pressed),
-					Some(VK::Return) => imgui.set_key(11, pressed),
-					Some(VK::Escape) => imgui.set_key(12, pressed),
-					Some(VK::A) => imgui.set_key(13, pressed),
-					Some(VK::C) => imgui.set_key(14, pressed),
-					Some(VK::V) => imgui.set_key(15, pressed),
-					Some(VK::X) => imgui.set_key(16, pressed),
-					Some(VK::Y) => imgui.set_key(17, pressed),
-					Some(VK::Z) => imgui.set_key(18, pressed),
-					Some(VK::LControl) | Some(VK::RControl) => imgui.set_key_ctrl(pressed),
-					Some(VK::LShift) | Some(VK::RShift) => imgui.set_key_shift(pressed),
-					Some(VK::LAlt) | Some(VK::RAlt) => imgui.set_key_alt(pressed),
-					Some(VK::LWin) | Some(VK::RWin) => imgui.set_key_super(pressed),
+	if let StateEvent::Window(e) = event {
+		if let Event::WindowEvent { window_id: _, event} = e {
+			match event {
+				WindowEvent::KeyboardInput { input, .. } => {
+					let pressed = input.state == ElementState::Pressed;
+					match input.virtual_keycode {
+						Some(VK::Tab) => imgui.set_key(0, pressed),
+						Some(VK::Left) => imgui.set_key(1, pressed),
+						Some(VK::Right) => imgui.set_key(2, pressed),
+						Some(VK::Up) => imgui.set_key(3, pressed),
+						Some(VK::Down) => imgui.set_key(4, pressed),
+						Some(VK::PageUp) => imgui.set_key(5, pressed),
+						Some(VK::PageDown) => imgui.set_key(6, pressed),
+						Some(VK::Home) => imgui.set_key(7, pressed),
+						Some(VK::End) => imgui.set_key(8, pressed),
+						Some(VK::Delete) => imgui.set_key(9, pressed),
+						Some(VK::Back) => imgui.set_key(10, pressed),
+						Some(VK::Return) => imgui.set_key(11, pressed),
+						Some(VK::Escape) => imgui.set_key(12, pressed),
+						Some(VK::A) => imgui.set_key(13, pressed),
+						Some(VK::C) => imgui.set_key(14, pressed),
+						Some(VK::V) => imgui.set_key(15, pressed),
+						Some(VK::X) => imgui.set_key(16, pressed),
+						Some(VK::Y) => imgui.set_key(17, pressed),
+						Some(VK::Z) => imgui.set_key(18, pressed),
+						Some(VK::LControl) | Some(VK::RControl) => imgui.set_key_ctrl(pressed),
+						Some(VK::LShift) | Some(VK::RShift) => imgui.set_key_shift(pressed),
+						Some(VK::LAlt) | Some(VK::RAlt) => imgui.set_key_alt(pressed),
+						Some(VK::LWin) | Some(VK::RWin) => imgui.set_key_super(pressed),
+						_ => {},
+					}
+				},
+				WindowEvent::CursorMoved { position: pos, .. } => {
+					mouse_state.pos = (pos.x as i32, pos.y as i32);
+				},
+				WindowEvent::MouseInput { state, button, .. } => match button {
+					MouseButton::Left => mouse_state.pressed.0 = *state == ElementState::Pressed,
+					MouseButton::Right => mouse_state.pressed.1 = *state == ElementState::Pressed,
+					MouseButton::Middle => mouse_state.pressed.2 = *state == ElementState::Pressed,
 					_ => {},
-				}
-			},
-			WindowEvent::CursorMoved { position: pos, .. } => {
-				mouse_state.pos = (pos.x as i32, pos.y as i32);
-			},
-			WindowEvent::MouseInput { state, button, .. } => match button {
-				MouseButton::Left => mouse_state.pressed.0 = *state == ElementState::Pressed,
-				MouseButton::Right => mouse_state.pressed.1 = *state == ElementState::Pressed,
-				MouseButton::Middle => mouse_state.pressed.2 = *state == ElementState::Pressed,
-				_ => {},
-			},
-			WindowEvent::MouseWheel { delta, phase: TouchPhase::Moved, .. } => match delta {
-				MouseScrollDelta::LineDelta(_, y) => mouse_state.wheel = *y,
-				MouseScrollDelta::PixelDelta(lp) => mouse_state.wheel = lp.y as f32,
-			},
-			ReceivedCharacter(c) => imgui.add_input_character(*c),
-			_ => (),
+				},
+				WindowEvent::MouseWheel { delta, phase: TouchPhase::Moved, .. } => match delta {
+					MouseScrollDelta::LineDelta(_, y) => mouse_state.wheel = *y,
+					MouseScrollDelta::PixelDelta(lp) => mouse_state.wheel = lp.y as f32,
+				},
+				WindowEvent::ReceivedCharacter(c) => imgui.add_input_character(*c),
+				_ => (),
+			}
 		}
 	}
 
