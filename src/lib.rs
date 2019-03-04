@@ -54,9 +54,9 @@ pub struct DrawUi {
 }
 
 pub struct ImguiState {
-	imgui: ImGui,
-	mouse_state: MouseState,
-	size: (u16, u16),
+	pub imgui: ImGui,
+	pub mouse_state: MouseState,
+	pub size: (u16, u16),
 }
 
 type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
@@ -248,7 +248,7 @@ impl Pass for DrawUi {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Default)]
-struct MouseState {
+pub struct MouseState {
 	pos: (i32, i32),
 	pressed: (bool, bool, bool),
 	wheel: f32,
