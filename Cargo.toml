@@ -8,12 +8,12 @@ repository = "https://github.com/Awpteamoose/amethyst-imgui"
 readme = "README.md"
 
 [dependencies]
-amethyst = { git = "https://github.com/jaynus/amethyst.git" }
+amethyst = { path = "../amethyst" }
 gfx = "0.17.1"
 glsl-layout = { version = "0.1.1", features = ["gfx"] }
 shred-derive = "0.5"
 shred = "0.7"
 
 glium = { version = "0.22", default-features = true }
-imgui = "*"
-imgui-gfx-renderer = "*"
+imgui = { path = "imgui-rs" }
+imgui-gfx-renderer = { path = "imgui-rs/imgui-gfx-renderer" }
