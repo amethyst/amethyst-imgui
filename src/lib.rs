@@ -47,10 +47,25 @@ struct RendererThing {
 	mesh: Mesh,
 }
 
-#[derive(Default)]
 pub struct DrawUi {
 	imgui: Option<ImGui>,
 	renderer: Option<RendererThing>,
+	config_flags: imgui::ImGuiConfigFlags,
+}
+impl Default for DrawUi {
+	fn default() -> Self {
+		Self {
+			imgui: None,
+			renderer: None,
+			config_flags: imgui::ImGuiConfigFlags::empty(),
+		}
+	}
+}
+impl DrawUi {
+	pub fn docking(mut self) -> Self {
+		self.config_flags.insert(imgui::ImGuiConfigFlags::DockingEnable);
+		self
+	}
 }
 
 pub struct ImguiState {
@@ -71,6 +86,7 @@ impl<'a> PassData<'a> for DrawUi {
 impl Pass for DrawUi {
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect, Error> {
 		let mut imgui = ImGui::init();
+
 		{
 			// Fix incorrect colors with sRGB framebuffer
 			fn imgui_gamma_to_linear(col: ImVec4) -> ImVec4 {
@@ -87,6 +103,7 @@ impl Pass for DrawUi {
 			}
 		}
 		imgui.set_ini_filename(None);
+		imgui.set_config(self.config_flags);
 
 		let font_size = 13.;
 

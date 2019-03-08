@@ -80,7 +80,7 @@ fn main() -> amethyst::Result<()> {
         Stage::with_backbuffer()
             .clear_target([0.1, 0.1, 0.1, 1.0], 1.0)
             .with_pass(DrawFlat2D::new())
-            .with_pass(amethyst_imgui::DrawUi::default()),
+            .with_pass(amethyst_imgui::DrawUi::default().docking()),
     );
 
     let game_data = GameDataBuilder::default()
