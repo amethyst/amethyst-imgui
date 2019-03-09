@@ -294,7 +294,7 @@ pub fn open_frame<'ui>(world: &amethyst::ecs::World) -> Option<&imgui::Ui<'ui>> 
 		_ => return None,
 	};
 
-	let frame = imgui.frame(FrameSize::new(f64::from(dimensions.width()), f64::from(dimensions.height()), 1.), time.delta_seconds());
+	let frame = imgui.frame(FrameSize::new(f64::from(dimensions.width()), f64::from(dimensions.height()), dimensions.hidpi_factor()), time.delta_seconds());
 	std::mem::forget(frame);
 	unsafe { imgui::Ui::current_ui() }
 }
@@ -319,8 +319,9 @@ pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::State
 	};
 
 	let resources = std::borrow::Borrow::<amethyst::ecs::Resources>::borrow(world);
-
+	let dimensions: ReadExpect<amethyst::renderer::ScreenDimensions> = SystemData::fetch(resources);
 	let mut imgui_state: Option<FetchMut<'_, Option<ImguiState>>> = resources.try_fetch_mut::<Option<ImguiState>>();
+
 	let imgui_state: &mut Option<ImguiState> = match imgui_state {
 		Some(ref mut x) => x,
 		_ => return,
@@ -384,7 +385,7 @@ pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::State
 		}
 	}
 
-	imgui.set_mouse_pos(mouse_state.pos.0 as f32, mouse_state.pos.1 as f32);
+	imgui.set_mouse_pos(mouse_state.pos.0 as f32 * dimensions.hidpi_factor() as f32, mouse_state.pos.1 as f32 * dimensions.hidpi_factor() as f32);
 	imgui.set_mouse_down([mouse_state.pressed.0, mouse_state.pressed.1, mouse_state.pressed.2, false, false]);
 	imgui.set_mouse_wheel(mouse_state.wheel);
 	mouse_state.wheel = 0.0;
