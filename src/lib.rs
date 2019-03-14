@@ -7,7 +7,7 @@ extern crate imgui_gfx_renderer;
 use amethyst::{
 	ecs::shred::FetchMut,
 	ecs::prelude::*,
-	core::nalgebra::{Vector2, Vector3},
+	core::math::{Vector2, Vector3},
 	error::Error,
 	renderer::{
 		pipe::{
