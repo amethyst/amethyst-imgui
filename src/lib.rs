@@ -83,11 +83,6 @@ impl<'a> PassData<'a> for DrawUi {
 	);
 }
 
-static mut GHETTO_DPI: f32 = 1.0;
-extern "C" fn test_dpi(viewport: *mut imgui::ImGuiViewport) -> std::os::raw::c_float {
-    unsafe { GHETTO_DPI }
-}
-
 impl Pass for DrawUi {
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect, Error> {
 		let mut imgui = ImGui::init();
@@ -109,13 +104,8 @@ impl Pass for DrawUi {
 		}
 		imgui.set_ini_filename(None);
 		imgui.set_config(self.config_flags);
-        {
-            let mut platform_io = imgui.platform_io_mut();
-            platform_io.get_window_dpi_scale = Some(test_dpi);
 
-        }
 		let font_size = 13.;
-
 		let _ = imgui.fonts().add_font_with_config(
 			include_bytes!("../mplus-1p-regular.ttf"),
 			ImFontConfig::new()
@@ -222,8 +212,6 @@ impl Pass for DrawUi {
 			mouse_state: MouseState::default(),
 			size: (1024, 1024),
 		});
-
-        unsafe { GHETTO_DPI = screen_dimensions.hidpi_factor() as f32; }
         imgui_state.imgui.set_font_global_scale(screen_dimensions.hidpi_factor() as f32);
 
 		let (width, height) = (screen_dimensions.width(), screen_dimensions.height());
