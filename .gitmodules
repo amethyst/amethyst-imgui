@@ -1,3 +1,3 @@
 [submodule "imgui-rs"]
 	path = imgui-rs
-	url = git@github.com:jaynus/imgui-rs.git
+	url = https://github.com/jaynus/imgui-rs.git
