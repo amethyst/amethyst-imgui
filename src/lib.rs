@@ -104,21 +104,6 @@ impl Pass for DrawUi {
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect, Error> {
 		let mut imgui = ImGui::init();
 
-		{
-			// Fix incorrect colors with sRGB framebuffer
-			fn imgui_gamma_to_linear(col: ImVec4) -> ImVec4 {
-				let x = col.x.powf(2.2);
-				let y = col.y.powf(2.2);
-				let z = col.z.powf(2.2);
-				let w = 1.0 - (1.0 - col.w).powf(2.2);
-				ImVec4::new(x, y, z, w)
-			}
-
-			let style = imgui.style_mut();
-			for col in 0..style.colors.len() {
-				style.colors[col] = imgui_gamma_to_linear(style.colors[col]);
-			}
-		}
 		imgui.set_ini_filename(None);
 
 		let font_size = 13.;
