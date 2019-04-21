@@ -1,20 +1,25 @@
 # Usage:
 1. Add this to your Stage:
 ```rust
-	.with_pass(amethyst_imgui::DrawUi::default())
+.with_pass(amethyst_imgui::DrawUi::default())
 ```
-2. Add this to your `handle_event`:
+1. Add this to `GameDataBuilder`:
 ```rust
-	amethyst_imgui::handle_imgui_events(data.world, &event);
+GameDataBuilder::default()
+	.with(amethyst_imgui::BeginFrame::default(), "imgui_begin", &[])
+	.with_barrier()
+	--- everything else ---
+	.with_barrier()
+	.with(amethyst_imgui::EndFrame::default(), "imgui_end", &["imgui_begin"]);
 ```
-3. Add this to the beginning of your main `update`:
+1. Use it in any `System`:
 ```rust
-	let ui = amethyst_imgui::open_frame(state.world);
-	if let Some(ui) = ui {
-		ui.show_demo_window(&mut true);
-	}
+amethyst_imgui::with(|ui| {
+	ui.show_demo_window(&mut true);
+});
 ```
-4. Add this to the end of your main `update`:
-```rust
-	if let Some(ui) = ui { amethyst_imgui::close_frame(ui) }
+
+# Example:
+```
+cargo run --example demo_window
 ```

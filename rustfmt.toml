@@ -1,0 +1,16 @@
+required_version = "1.2.0"
+unstable_features = true
+
+hard_tabs = true
+match_block_trailing_comma = true
+imports_layout = "HorizontalVertical"
+merge_imports = true
+max_width = 140
+reorder_impl_items = true
+report_todo = "Always"
+report_fixme = "Always"
+use_field_init_shorthand = true
+use_try_shorthand = true
+edition = "2018"
+newline_style = "Unix"
+binop_separator = "Back"

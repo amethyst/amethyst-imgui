@@ -1,13 +1,15 @@
-pub extern crate imgui;
 extern crate amethyst;
 extern crate gfx;
 extern crate glsl_layout;
+pub extern crate imgui;
 extern crate imgui_gfx_renderer;
 
 use amethyst::{
-	ecs::shred::FetchMut,
-	ecs::prelude::*,
-	core::math::{Vector2, Vector3},
+	core::{
+		math::{Vector2, Vector3},
+		shrev::{EventChannel, EventIterator},
+	},
+	ecs::{prelude::*, ReadExpect, Write},
 	error::Error,
 	renderer::{
 		pipe::{
@@ -15,17 +17,22 @@ use amethyst::{
 			Effect,
 			NewEffect,
 		},
+		ElementState,
 		Encoder,
+		Event,
 		Mesh,
+		MouseButton,
 		PosTex,
 		Resources,
 		VertexFormat,
+		VirtualKeyCode as VK,
+		WindowEvent,
 	},
+	winit::{MouseScrollDelta, TouchPhase},
 };
-use gfx::{memory::Typed, preset::blend, pso::buffer::ElemStride, state::ColorMask};
-use gfx::traits::Factory;
+use gfx::{memory::Typed, preset::blend, pso::buffer::ElemStride, state::ColorMask, traits::Factory};
 use glsl_layout::{vec2, vec4, Uniform};
-use imgui::{FontGlyphRange, FrameSize, ImFontConfig, ImGui, ImVec4};
+use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImVec4};
 use imgui_gfx_renderer::{Renderer as ImguiRenderer, Shaders};
 
 const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
@@ -77,10 +84,35 @@ pub struct ImguiState {
 type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
 
 impl<'a> PassData<'a> for DrawUi {
-	type Data = (
-		ReadExpect<'a, amethyst::renderer::ScreenDimensions>,
-		Write<'a, Option<ImguiState>>,
-	);
+	type Data = (ReadExpect<'a, amethyst::renderer::ScreenDimensions>, Write<'a, Option<ImguiState>>);
+}
+
+macro_rules! keys {
+	($m:ident) => {
+		$m![
+			Tab => Tab,
+			LeftArrow => Left,
+			RightArrow => Right,
+			UpArrow => Up,
+			DownArrow => Down,
+			PageUp => PageUp,
+			PageDown => PageDown,
+			Home => Home,
+			End => End,
+			Insert => Insert,
+			Delete => Delete,
+			Backspace => Back,
+			Space => Space,
+			Enter => Return,
+			Escape => Escape,
+			A => A,
+			C => C,
+			V => V,
+			X => X,
+			Y => Y,
+			Z => Z,
+		];
+	};
 }
 
 impl Pass for DrawUi {
@@ -126,32 +158,12 @@ impl Pass for DrawUi {
 
 		{
 			macro_rules! set_keys {
-				($($key:ident => $id:expr),+$(,)*) => {
-					$(imgui.set_imgui_key(imgui::ImGuiKey::$key, $id);)+
+				($($key:ident => $id:ident),+$(,)*) => {
+					$(imgui.set_imgui_key(imgui::ImGuiKey::$key, VK::$id as _);)+
 				};
 			}
 
-			set_keys![
-				Tab => 0,
-				LeftArrow => 1,
-				RightArrow => 2,
-				UpArrow => 3,
-				DownArrow => 4,
-				PageUp => 5,
-				PageDown => 6,
-				Home => 7,
-				End => 8,
-				Delete => 9,
-				Backspace => 10,
-				Enter => 11,
-				Escape => 12,
-				A => 13,
-				C => 14,
-				V => 15,
-				X => 16,
-				Y => 17,
-				Z => 18,
-			];
+			keys!(set_keys);
 		}
 
 		let data = vec![
@@ -207,15 +219,17 @@ impl Pass for DrawUi {
 		mut factory: amethyst::renderer::Factory,
 		(screen_dimensions, mut imgui_state): <Self as PassData<'apply_pd>>::Data,
 	) {
-        let imgui_state = imgui_state.get_or_insert_with(|| ImguiState {
+		let imgui_state = imgui_state.get_or_insert_with(|| ImguiState {
 			imgui: self.imgui.take().unwrap(),
 			mouse_state: MouseState::default(),
 			size: (1024, 1024),
 		});
-        imgui_state.imgui.set_font_global_scale(screen_dimensions.hidpi_factor() as f32);
+		imgui_state.imgui.set_font_global_scale(screen_dimensions.hidpi_factor() as f32);
 
 		let (width, height) = (screen_dimensions.width(), screen_dimensions.height());
-		if width <= 0. || height <= 0. { return; }
+		if width <= 0. || height <= 0. {
+			return;
+		}
 		let renderer_thing = self.renderer.as_mut().unwrap();
 
 		let vertex_args = VertexArgs {
@@ -272,100 +286,26 @@ pub struct MouseState {
 	wheel: f32,
 }
 
-type Data<'system_data> = (
-	ReadExpect<'system_data, amethyst::renderer::ScreenDimensions>,
-	ReadExpect<'system_data, amethyst::core::timing::Time>,
-	Write<'system_data, Option<ImguiState>>,
-);
-
-pub fn open_frame<'ui>(world: &amethyst::ecs::World) -> Option<&imgui::Ui<'ui>> {
-	let resources = std::borrow::Borrow::<amethyst::ecs::Resources>::borrow(world);
-	let (dimensions, time, mut imgui_state) = Data::fetch(resources);
-
-	let dimensions: &amethyst::renderer::ScreenDimensions = &dimensions;
-	let time: &amethyst::core::timing::Time = &time;
-	let imgui_state: &mut Option<ImguiState> = &mut imgui_state;
-
-	if dimensions.width() <= 0. || dimensions.height() <= 0. {
-		return None;
-	}
-
-	let imgui = match imgui_state {
-		Some(x) => &mut x.imgui,
-		_ => return None,
-	};
-
-	let frame = imgui.frame(FrameSize::new(f64::from(dimensions.width()), f64::from(dimensions.height()), dimensions.hidpi_factor()), time.delta_seconds());
-	std::mem::forget(frame);
-	unsafe { imgui::Ui::current_ui() }
-}
-
-pub fn close_frame(ui: &imgui::Ui) {
-	unsafe {
-		(ui as *const imgui::Ui).read_volatile();
-	};
-}
-
-pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::StateEvent) {
-	use amethyst::{
-		StateEvent,
-		winit::{
-				WindowEvent,
-				MouseScrollDelta,
-				ElementState,
-				Event,
-				MouseButton,
-				VirtualKeyCode as VK,
-				TouchPhase},
-	};
-
-	let resources = std::borrow::Borrow::<amethyst::ecs::Resources>::borrow(world);
-	let dimensions: ReadExpect<amethyst::renderer::ScreenDimensions> = SystemData::fetch(resources);
-	let mut imgui_state: Option<FetchMut<'_, Option<ImguiState>>> = resources.try_fetch_mut::<Option<ImguiState>>();
-
-	let imgui_state: &mut Option<ImguiState> = match imgui_state {
-		Some(ref mut x) => x,
-		_ => return,
-	};
-	let imgui_state: &mut ImguiState = match imgui_state {
-		Some(ref mut x) => x,
-		_ => return,
-	};
-
+fn handle_imgui_events(imgui_state: &mut ImguiState, events: EventIterator<Event>, dpi: f32) {
 	let imgui = &mut imgui_state.imgui;
 	let mouse_state = &mut imgui_state.mouse_state;
 
-	if let StateEvent::Window(e) = event {
-		if let Event::WindowEvent { window_id: _, event} = e {
-			match event {
+	for event in events {
+		if let Event::WindowEvent { event: e, .. } = event {
+			match e {
 				WindowEvent::KeyboardInput { input, .. } => {
 					let pressed = input.state == ElementState::Pressed;
-					match input.virtual_keycode {
-						Some(VK::Tab) => imgui.set_key(0, pressed),
-						Some(VK::Left) => imgui.set_key(1, pressed),
-						Some(VK::Right) => imgui.set_key(2, pressed),
-						Some(VK::Up) => imgui.set_key(3, pressed),
-						Some(VK::Down) => imgui.set_key(4, pressed),
-						Some(VK::PageUp) => imgui.set_key(5, pressed),
-						Some(VK::PageDown) => imgui.set_key(6, pressed),
-						Some(VK::Home) => imgui.set_key(7, pressed),
-						Some(VK::End) => imgui.set_key(8, pressed),
-						Some(VK::Delete) => imgui.set_key(9, pressed),
-						Some(VK::Back) => imgui.set_key(10, pressed),
-						Some(VK::Return) => imgui.set_key(11, pressed),
-						Some(VK::Escape) => imgui.set_key(12, pressed),
-						Some(VK::A) => imgui.set_key(13, pressed),
-						Some(VK::C) => imgui.set_key(14, pressed),
-						Some(VK::V) => imgui.set_key(15, pressed),
-						Some(VK::X) => imgui.set_key(16, pressed),
-						Some(VK::Y) => imgui.set_key(17, pressed),
-						Some(VK::Z) => imgui.set_key(18, pressed),
-						Some(VK::LControl) | Some(VK::RControl) => imgui.set_key_ctrl(pressed),
-						Some(VK::LShift) | Some(VK::RShift) => imgui.set_key_shift(pressed),
-						Some(VK::LAlt) | Some(VK::RAlt) => imgui.set_key_alt(pressed),
-						Some(VK::LWin) | Some(VK::RWin) => imgui.set_key_super(pressed),
-						_ => {},
+
+					macro_rules! match_keys {
+						($($key:ident => $id:ident),+$(,)*) => {
+							match input.virtual_keycode {
+								$(Some(VK::$id) => imgui.set_key(VK::$id as _, pressed),)+
+								_ => {},
+							}
+						};
 					}
+
+					keys!(match_keys);
 				},
 				WindowEvent::CursorMoved { position: pos, .. } => {
 					mouse_state.pos = (pos.x as i32, pos.y as i32);
@@ -376,7 +316,11 @@ pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::State
 					MouseButton::Middle => mouse_state.pressed.2 = *state == ElementState::Pressed,
 					_ => {},
 				},
-				WindowEvent::MouseWheel { delta, phase: TouchPhase::Moved, .. } => match delta {
+				WindowEvent::MouseWheel {
+					delta,
+					phase: TouchPhase::Moved,
+					..
+				} => match delta {
 					MouseScrollDelta::LineDelta(_, y) => mouse_state.wheel = *y,
 					MouseScrollDelta::PixelDelta(lp) => mouse_state.wheel = lp.y as f32,
 				},
@@ -386,8 +330,71 @@ pub fn handle_imgui_events(world: &amethyst::ecs::World, event: &amethyst::State
 		}
 	}
 
-	imgui.set_mouse_pos(mouse_state.pos.0 as f32 * dimensions.hidpi_factor() as f32, mouse_state.pos.1 as f32 * dimensions.hidpi_factor() as f32);
+	imgui.set_mouse_pos(mouse_state.pos.0 as f32 * dpi, mouse_state.pos.1 as f32 * dpi);
 	imgui.set_mouse_down([mouse_state.pressed.0, mouse_state.pressed.1, mouse_state.pressed.2, false, false]);
 	imgui.set_mouse_wheel(mouse_state.wheel);
 	mouse_state.wheel = 0.0;
+}
+
+pub fn with(f: impl Fn(&imgui::Ui)) {
+	unsafe {
+		if let Some(ui) = imgui::Ui::current_ui() {
+			(ui as *const imgui::Ui<'_>).read_volatile();
+			f(ui);
+		}
+	}
+}
+
+#[derive(Default)]
+pub struct BeginFrame {
+	reader: Option<ReaderId<Event>>,
+}
+impl<'s> amethyst::ecs::System<'s> for BeginFrame {
+	type SystemData = (
+		Read<'s, EventChannel<Event>>,
+		ReadExpect<'s, amethyst::renderer::ScreenDimensions>,
+		ReadExpect<'s, amethyst::core::timing::Time>,
+		Write<'s, Option<ImguiState>>,
+	);
+
+	fn setup(&mut self, res: &mut amethyst::ecs::Resources) {
+		Self::SystemData::setup(res);
+		self.reader = Some(res.fetch_mut::<EventChannel<Event>>().register_reader());
+	}
+
+	fn run(&mut self, (events, dimensions, time, mut imgui_state): Self::SystemData) {
+		let dimensions: &amethyst::renderer::ScreenDimensions = &dimensions;
+		let time: &amethyst::core::timing::Time = &time;
+
+		if dimensions.width() <= 0. || dimensions.height() <= 0. {
+			return;
+		}
+
+		let imgui_state = if let Some(x) = &mut imgui_state as &mut Option<ImguiState> {
+			x
+		} else {
+			return;
+		};
+		handle_imgui_events(imgui_state, events.read(self.reader.as_mut().unwrap()), 1.);
+
+		let frame = imgui_state.imgui.frame(
+			imgui::FrameSize::new(
+				f64::from(dimensions.width()),
+				f64::from(dimensions.height()),
+				dimensions.hidpi_factor(),
+			),
+			time.delta_seconds(),
+		);
+		std::mem::forget(frame);
+	}
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct EndFrame;
+impl<'s> amethyst::ecs::System<'s> for EndFrame {
+	type SystemData = ();
+
+	fn run(&mut self, _: Self::SystemData) {
+		with(|_| {});
+	}
 }

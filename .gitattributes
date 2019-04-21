@@ -1,0 +1,4 @@
+*.rs eol=lf
+
+*.png -text
+*.ttf -text
