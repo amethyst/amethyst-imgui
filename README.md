@@ -8,7 +8,7 @@
 GameDataBuilder::default()
 	.with(amethyst_imgui::BeginFrame::default(), "imgui_begin", &[])
 	.with_barrier()
-	--- everything else ---
+	// --- everything else ---
 	.with_barrier()
 	.with(amethyst_imgui::EndFrame::default(), "imgui_end", &["imgui_begin"]);
 ```
