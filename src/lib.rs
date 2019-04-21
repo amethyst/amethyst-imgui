@@ -54,25 +54,10 @@ struct RendererThing {
 	mesh: Mesh,
 }
 
+#[derive(Default)]
 pub struct DrawUi {
 	imgui: Option<ImGui>,
 	renderer: Option<RendererThing>,
-	config_flags: imgui::ImGuiConfigFlags,
-}
-impl Default for DrawUi {
-	fn default() -> Self {
-		Self {
-			imgui: None,
-			renderer: None,
-			config_flags: imgui::ImGuiConfigFlags::empty(),
-		}
-	}
-}
-impl DrawUi {
-	pub fn docking(mut self) -> Self {
-		self.config_flags.insert(imgui::ImGuiConfigFlags::DockingEnable);
-		self
-	}
 }
 
 pub struct ImguiState {
@@ -135,7 +120,6 @@ impl Pass for DrawUi {
 			}
 		}
 		imgui.set_ini_filename(None);
-		imgui.set_config(self.config_flags);
 
 		let font_size = 13.;
 		let _ = imgui.fonts().add_font_with_config(
