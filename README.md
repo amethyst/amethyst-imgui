@@ -1,3 +1,5 @@
+[![Crates.io](https://img.shields.io/crates/v/amethyst-imgui.svg)](https://crates.io/crates/amethyst-imgui/)
+
 # Usage:
 1. Add this to your Stage:
 ```rust
