@@ -15,8 +15,8 @@ shred-derive = "0.6"
 shred = "0.8"
 
 glium = { version = "0.24", default-features = true }
-imgui = { path = "imgui-rs" }
-imgui-gfx-renderer = { path = "imgui-rs/imgui-gfx-renderer" }
+imgui = { git = "https://github.com/awpteamoose/imgui-rs.git" }
+imgui-gfx-renderer = { git = "https://github.com/awpteamoose/imgui-rs.git" }
 
 [[example]]
 name = "demo_window"
