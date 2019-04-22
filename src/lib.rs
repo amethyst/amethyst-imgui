@@ -32,7 +32,7 @@ use amethyst::{
 };
 use gfx::{memory::Typed, preset::blend, pso::buffer::ElemStride, state::ColorMask, traits::Factory};
 use glsl_layout::{vec2, vec4, Uniform};
-use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImVec4};
+use imgui::{FontGlyphRange, ImFontConfig, ImGui};
 use imgui_gfx_renderer::{Renderer as ImguiRenderer, Shaders};
 
 const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
@@ -305,7 +305,7 @@ fn handle_imgui_events(imgui_state: &mut ImguiState, events: EventIterator<Event
 	mouse_state.wheel = 0.0;
 }
 
-pub fn with(f: impl Fn(&imgui::Ui)) {
+pub fn with(f: impl FnOnce(&imgui::Ui)) {
 	unsafe {
 		if let Some(ui) = imgui::Ui::current_ui() {
 			(ui as *const imgui::Ui<'_>).read_volatile();
