@@ -269,6 +269,10 @@ fn handle_imgui_events(imgui_state: &mut ImguiState, events: EventIterator<Event
 						($($key:ident => $id:ident),+$(,)*) => {
 							match input.virtual_keycode {
 								$(Some(VK::$id) => imgui.set_key(VK::$id as _, pressed),)+
+								Some(VK::LControl) | Some(VK::RControl) => imgui.set_key_ctrl(pressed),
+								Some(VK::LShift) | Some(VK::RShift) => imgui.set_key_shift(pressed),
+								Some(VK::LAlt) | Some(VK::RAlt) => imgui.set_key_alt(pressed),
+								Some(VK::LWin) | Some(VK::RWin) => imgui.set_key_super(pressed),
 								_ => {},
 							}
 						};
