@@ -6,11 +6,10 @@ extern crate imgui_gfx_renderer;
 
 use amethyst::{
 	core::{
-		math::{Vector2, Vector3},
+		nalgebra::{Vector2, Vector3},
 		shrev::{EventChannel, EventIterator},
 	},
 	ecs::{prelude::*, ReadExpect, Write},
-	error::Error,
 	renderer::{
 		pipe::{
 			pass::{Pass, PassData},
@@ -27,6 +26,7 @@ use amethyst::{
 		VertexFormat,
 		VirtualKeyCode as VK,
 		WindowEvent,
+		error::Error,
 	},
 	winit::{MouseScrollDelta, TouchPhase},
 };
