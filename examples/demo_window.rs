@@ -17,11 +17,8 @@ impl<'s> amethyst::ecs::System<'s> for ImguiUseSystem {
 
 	fn run(&mut self, _: Self::SystemData) {
 		amethyst_imgui::with(|ui| {
-			let root_dock = ui.dockspace_over_viewport(None, imgui::ImGuiDockNodeFlags::PassthruDockspace);
-
 			ui.window(imgui::im_str!("Hello world"))
 				.size((300.0, 100.0), imgui::ImGuiCond::FirstUseEver)
-				.dockspace_id(root_dock, imgui::ImGuiCond::FirstUseEver)
 				.build(|| {
 					ui.text(imgui::im_str!("Hello world!"));
 					ui.text(imgui::im_str!("こんにちは世界！"));
@@ -48,7 +45,7 @@ fn main() -> amethyst::Result<()> {
 		Stage::with_backbuffer()
 			.clear_target([0.1, 0.1, 0.1, 1.0], 1.0)
 			.with_pass(DrawFlat2D::new())
-			.with_pass(amethyst_imgui::DrawUi::default().docking()),
+			.with_pass(amethyst_imgui::DrawUi::default()),
 	);
 
 	let game_data = GameDataBuilder::default()
