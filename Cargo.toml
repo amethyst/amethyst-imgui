@@ -17,6 +17,7 @@ shred = "0.8"
 glium = { version = "0.24", default-features = true }
 imgui = { git = "https://github.com/awpteamoose/imgui-rs.git", branch = "gfx-rollback" }
 imgui-gfx-renderer = { git = "https://github.com/awpteamoose/imgui-rs.git", branch = "gfx-rollback" }
+imgui-winit-support = { git = "https://github.com/awpteamoose/imgui-rs.git", branch = "gfx-rollback" }
 
 [[example]]
 name = "demo_window"

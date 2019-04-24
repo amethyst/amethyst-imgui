@@ -27,12 +27,13 @@ use amethyst::{
 		VertexFormat,
 		VirtualKeyCode as VK,
 		WindowEvent,
+		WindowMessages,
 	},
-	winit::{MouseScrollDelta, TouchPhase},
+	winit::{MouseCursor, MouseScrollDelta, TouchPhase},
 };
 use gfx::{memory::Typed, preset::blend, pso::buffer::ElemStride, state::ColorMask, traits::Factory};
 use glsl_layout::{vec2, vec4, Uniform};
-use imgui::{FontGlyphRange, ImFontConfig, ImGui};
+use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImGuiMouseCursor};
 use imgui_gfx_renderer::{Renderer as ImguiRenderer, Shaders};
 
 const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
@@ -72,34 +73,6 @@ impl<'a> PassData<'a> for DrawUi {
 	type Data = (ReadExpect<'a, amethyst::renderer::ScreenDimensions>, Write<'a, Option<ImguiState>>);
 }
 
-macro_rules! keys {
-	($m:ident) => {
-		$m![
-			Tab => Tab,
-			LeftArrow => Left,
-			RightArrow => Right,
-			UpArrow => Up,
-			DownArrow => Down,
-			PageUp => PageUp,
-			PageDown => PageDown,
-			Home => Home,
-			End => End,
-			Insert => Insert,
-			Delete => Delete,
-			Backspace => Back,
-			Space => Space,
-			Enter => Return,
-			Escape => Escape,
-			A => A,
-			C => C,
-			V => V,
-			X => X,
-			Y => Y,
-			Z => Z,
-		];
-	};
-}
-
 impl Pass for DrawUi {
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect, Error> {
 		let mut imgui = ImGui::init();
@@ -125,15 +98,7 @@ impl Pass for DrawUi {
 				.size_pixels(font_size),
 		);
 
-		{
-			macro_rules! set_keys {
-				($($key:ident => $id:ident),+$(,)*) => {
-					$(imgui.set_imgui_key(imgui::ImGuiKey::$key, VK::$id as _);)+
-				};
-			}
-
-			keys!(set_keys);
-		}
+		imgui_winit_support::configure_keys(&mut imgui);
 
 		let data = vec![
 			PosTex {
@@ -255,66 +220,34 @@ pub struct MouseState {
 	wheel: f32,
 }
 
-fn handle_imgui_events(imgui_state: &mut ImguiState, events: EventIterator<Event>, dpi: f32) {
-	let imgui = &mut imgui_state.imgui;
-	let mouse_state = &mut imgui_state.mouse_state;
-
-	for event in events {
-		if let Event::WindowEvent { event: e, .. } = event {
-			match e {
-				WindowEvent::KeyboardInput { input, .. } => {
-					let pressed = input.state == ElementState::Pressed;
-
-					macro_rules! match_keys {
-						($($key:ident => $id:ident),+$(,)*) => {
-							match input.virtual_keycode {
-								$(Some(VK::$id) => imgui.set_key(VK::$id as _, pressed),)+
-								Some(VK::LControl) | Some(VK::RControl) => imgui.set_key_ctrl(pressed),
-								Some(VK::LShift) | Some(VK::RShift) => imgui.set_key_shift(pressed),
-								Some(VK::LAlt) | Some(VK::RAlt) => imgui.set_key_alt(pressed),
-								Some(VK::LWin) | Some(VK::RWin) => imgui.set_key_super(pressed),
-								_ => {},
-							}
-						};
-					}
-
-					keys!(match_keys);
-				},
-				WindowEvent::CursorMoved { position: pos, .. } => {
-					mouse_state.pos = (pos.x as i32, pos.y as i32);
-				},
-				WindowEvent::MouseInput { state, button, .. } => match button {
-					MouseButton::Left => mouse_state.pressed.0 = *state == ElementState::Pressed,
-					MouseButton::Right => mouse_state.pressed.1 = *state == ElementState::Pressed,
-					MouseButton::Middle => mouse_state.pressed.2 = *state == ElementState::Pressed,
-					_ => {},
-				},
-				WindowEvent::MouseWheel {
-					delta,
-					phase: TouchPhase::Moved,
-					..
-				} => match delta {
-					MouseScrollDelta::LineDelta(_, y) => mouse_state.wheel = *y,
-					MouseScrollDelta::PixelDelta(lp) => mouse_state.wheel = lp.y as f32,
-				},
-				WindowEvent::ReceivedCharacter(c) => imgui.add_input_character(*c),
-				_ => (),
-			}
-		}
-	}
-
-	imgui.set_mouse_pos(mouse_state.pos.0 as f32 * dpi, mouse_state.pos.1 as f32 * dpi);
-	imgui.set_mouse_down([mouse_state.pressed.0, mouse_state.pressed.1, mouse_state.pressed.2, false, false]);
-	imgui.set_mouse_wheel(mouse_state.wheel);
-	mouse_state.wheel = 0.0;
-}
-
 pub fn with(f: impl FnOnce(&imgui::Ui)) {
 	unsafe {
 		if let Some(ui) = imgui::Ui::current_ui() {
 			(ui as *const imgui::Ui<'_>).read_volatile();
 			f(ui);
 		}
+	}
+}
+
+fn update_mouse_cursor(imgui: &ImGui, messages: &mut WindowMessages) {
+	let mouse_cursor = imgui.mouse_cursor();
+	if imgui.mouse_draw_cursor() || mouse_cursor == ImGuiMouseCursor::None {
+		messages.send_command(move |win| win.hide_cursor(true));
+	} else {
+		messages.send_command(move |win| {
+			win.hide_cursor(false);
+			win.set_cursor(match mouse_cursor {
+				ImGuiMouseCursor::None => unreachable!("mouse_cursor was None!"),
+				ImGuiMouseCursor::Arrow => MouseCursor::Arrow,
+				ImGuiMouseCursor::TextInput => MouseCursor::Text,
+				ImGuiMouseCursor::ResizeAll => MouseCursor::Move,
+				ImGuiMouseCursor::ResizeNS => MouseCursor::NsResize,
+				ImGuiMouseCursor::ResizeEW => MouseCursor::EwResize,
+				ImGuiMouseCursor::ResizeNESW => MouseCursor::NeswResize,
+				ImGuiMouseCursor::ResizeNWSE => MouseCursor::NwseResize,
+				ImGuiMouseCursor::Hand => MouseCursor::Hand,
+			});
+		});
 	}
 }
 
@@ -328,6 +261,7 @@ impl<'s> amethyst::ecs::System<'s> for BeginFrame {
 		ReadExpect<'s, amethyst::renderer::ScreenDimensions>,
 		ReadExpect<'s, amethyst::core::timing::Time>,
 		Write<'s, Option<ImguiState>>,
+		Write<'s, WindowMessages>,
 	);
 
 	fn setup(&mut self, res: &mut amethyst::ecs::Resources) {
@@ -335,7 +269,7 @@ impl<'s> amethyst::ecs::System<'s> for BeginFrame {
 		self.reader = Some(res.fetch_mut::<EventChannel<Event>>().register_reader());
 	}
 
-	fn run(&mut self, (events, dimensions, time, mut imgui_state): Self::SystemData) {
+	fn run(&mut self, (events, dimensions, time, mut imgui_state, mut window_messages): Self::SystemData) {
 		let dimensions: &amethyst::renderer::ScreenDimensions = &dimensions;
 		let time: &amethyst::core::timing::Time = &time;
 
@@ -343,19 +277,16 @@ impl<'s> amethyst::ecs::System<'s> for BeginFrame {
 			return;
 		}
 
-		let imgui_state = if let Some(x) = &mut imgui_state as &mut Option<ImguiState> {
-			x
-		} else {
-			return;
-		};
-		handle_imgui_events(imgui_state, events.read(self.reader.as_mut().unwrap()), 1.);
+		let imgui_state = if let Some(x) = &mut imgui_state as &mut Option<ImguiState> { x } else { return; };
+
+		let dpi = dimensions.hidpi_factor();
+		for event in events.read(self.reader.as_mut().unwrap()) {
+			imgui_winit_support::handle_event(&mut imgui_state.imgui, &event, dpi as f64, dpi as f64);
+		}
+		update_mouse_cursor(&mut imgui_state.imgui, &mut window_messages);
 
 		let frame = imgui_state.imgui.frame(
-			imgui::FrameSize::new(
-				f64::from(dimensions.width()),
-				f64::from(dimensions.height()),
-				dimensions.hidpi_factor(),
-			),
+			imgui::FrameSize::new(f64::from(dimensions.width()), f64::from(dimensions.height()), dpi),
 			time.delta_seconds(),
 		);
 		std::mem::forget(frame);
