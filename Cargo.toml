@@ -14,10 +14,9 @@ glsl-layout = { version = "0.1.1", features = ["gfx"] }
 shred-derive = "0.6"
 shred = "0.8"
 
-glium = { version = "0.24", default-features = true }
-imgui = { git = "https://github.com/awpteamoose/imgui-rs.git", branch = "gfx-rollback" }
-imgui-gfx-renderer = { git = "https://github.com/awpteamoose/imgui-rs.git", branch = "gfx-rollback" }
-imgui-winit-support = { git = "https://github.com/awpteamoose/imgui-rs.git", branch = "gfx-rollback" }
+imgui = { path = "./imgui-rs" }
+imgui-gfx-renderer = { path = "./imgui-rs/imgui-gfx-renderer" }
+imgui-winit-support = { path = "./imgui-rs/imgui-winit-support" }
 
 [[example]]
 name = "demo_window"
