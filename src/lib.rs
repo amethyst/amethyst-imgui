@@ -7,7 +7,7 @@ extern crate imgui_gfx_renderer;
 use amethyst::{
 	core::{
 		math::{Vector2, Vector3},
-		shrev::{EventChannel, EventIterator},
+		shrev::EventChannel,
 	},
 	ecs::{prelude::*, ReadExpect, Write},
 	error::Error,
@@ -17,19 +17,15 @@ use amethyst::{
 			Effect,
 			NewEffect,
 		},
-		ElementState,
 		Encoder,
 		Event,
 		Mesh,
-		MouseButton,
 		PosTex,
 		Resources,
 		VertexFormat,
-		VirtualKeyCode as VK,
-		WindowEvent,
 		WindowMessages,
 	},
-	winit::{MouseCursor, MouseScrollDelta, TouchPhase},
+	winit::MouseCursor,
 };
 use gfx::{memory::Typed, preset::blend, pso::buffer::ElemStride, state::ColorMask, traits::Factory};
 use glsl_layout::{vec2, vec4, Uniform};
@@ -71,6 +67,14 @@ type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
 
 impl<'a> PassData<'a> for DrawUi {
 	type Data = (ReadExpect<'a, amethyst::renderer::ScreenDimensions>, Write<'a, Option<ImguiState>>);
+}
+
+#[derive(Default)]
+pub struct ImguiIni(Option<String>);
+impl ImguiIni {
+	pub fn new(path: &str) -> Self {
+		Self(Some(path.to_owned()))
+	}
 }
 
 impl Pass for DrawUi {
@@ -262,6 +266,7 @@ impl<'s> amethyst::ecs::System<'s> for BeginFrame {
 		ReadExpect<'s, amethyst::core::timing::Time>,
 		Write<'s, Option<ImguiState>>,
 		Write<'s, WindowMessages>,
+		Read<'s, ImguiIni>,
 	);
 
 	fn setup(&mut self, res: &mut amethyst::ecs::Resources) {
@@ -269,7 +274,7 @@ impl<'s> amethyst::ecs::System<'s> for BeginFrame {
 		self.reader = Some(res.fetch_mut::<EventChannel<Event>>().register_reader());
 	}
 
-	fn run(&mut self, (events, dimensions, time, mut imgui_state, mut window_messages): Self::SystemData) {
+	fn run(&mut self, (events, dimensions, time, mut imgui_state, mut window_messages, ini_path): Self::SystemData) {
 		let dimensions: &amethyst::renderer::ScreenDimensions = &dimensions;
 		let time: &amethyst::core::timing::Time = &time;
 
@@ -279,11 +284,15 @@ impl<'s> amethyst::ecs::System<'s> for BeginFrame {
 
 		let imgui_state = if let Some(x) = &mut imgui_state as &mut Option<ImguiState> { x } else { return; };
 
+		if let Some(path) = &ini_path.0 {
+			imgui_state.imgui.set_ini_filename(Some(imgui::ImString::new(path.clone())));
+		}
+
 		let dpi = dimensions.hidpi_factor();
 		for event in events.read(self.reader.as_mut().unwrap()) {
 			imgui_winit_support::handle_event(&mut imgui_state.imgui, &event, dpi as f64, dpi as f64);
 		}
-		update_mouse_cursor(&mut imgui_state.imgui, &mut window_messages);
+		update_mouse_cursor(&imgui_state.imgui, &mut window_messages);
 
 		let frame = imgui_state.imgui.frame(
 			imgui::FrameSize::new(f64::from(dimensions.width()), f64::from(dimensions.height()), dpi),
