@@ -1,4 +1,4 @@
-#version 150
+#version 150 core
 
 layout (std140) uniform VertexArgs {
 	uniform vec4 proj_vec;
