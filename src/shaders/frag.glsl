@@ -3,7 +3,6 @@
 uniform sampler2D albedo;
 
 in vec2 f_uv;
-in vec4 f_color;
 
 out vec4 color;
 

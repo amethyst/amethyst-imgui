@@ -40,7 +40,6 @@ const FRAG_SRC: &[u8] = include_bytes!("shaders/frag.glsl");
 #[repr(C)]
 struct VertexArgs {
 	proj_vec: vec4,
-	coord: vec2,
 	dimension: vec2,
 }
 
@@ -172,7 +171,6 @@ impl Pass for DrawUi {
 
 		let vertex_args = VertexArgs {
 			proj_vec: [2. / width, -2. / height, 0., 1.].into(),
-			coord: [0., 0.].into(),
 			dimension: [width, height].into(),
 		};
 
