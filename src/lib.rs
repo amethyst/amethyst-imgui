@@ -38,7 +38,7 @@ use glsl_layout::{vec2, vec4, Uniform, Pod};
 use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImGuiMouseCursor};
 use imgui_gfx_renderer::{Renderer as ImguiRenderer};
 use gfx::{
-    format::{ChannelType, Format, SurfaceType},
+	format::{ChannelType, Format, SurfaceType},
 };
 
 const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
@@ -107,10 +107,23 @@ impl VertexFormat for PosTexCol {
 	];
 }
 
+/// Fix incorrect colors with sRGB framebuffer
+pub fn imgui_gamma_to_linear(col: imgui::ImVec4) -> imgui::ImVec4 {
+	let x = col.x.powf(2.2);
+	let y = col.y.powf(2.2);
+	let z = col.z.powf(2.2);
+	let w = 1.0 - (1.0 - col.w).powf(2.2);
+	imgui::ImVec4::new(x, y, z, w)
+}
+
 impl Pass for DrawUi {
 	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect, Error> {
 		let mut imgui = ImGui::init();
 
+		let style = imgui.style_mut();
+		for col in 0..style.colors.len() {
+			style.colors[col] = imgui_gamma_to_linear(style.colors[col]);
+		}
 		imgui.set_ini_filename(None);
 
 		let font_size = 13.;
@@ -167,7 +180,7 @@ impl Pass for DrawUi {
 			},
 		];
 
-		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<gfx::format::Rgba8>(1024, 1024).unwrap();
+		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<gfx::format::Srgba8>(1024, 1024).unwrap();
 		let renderer = ImguiRenderer::init(&mut imgui, effect.factory, (VERT_SRC, FRAG_SRC), target).unwrap();
 		self.renderer = Some(RendererThing {
 			renderer,
@@ -182,9 +195,9 @@ impl Pass for DrawUi {
 			// .with_raw_constant_buffer("matrix", std::mem::size_of::<<VertexArgs as Uniform>::Std140>(), 1)
 			.with_raw_global("matrix")
 			// .with_raw_vertex_buffer(&[
-			//     ("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
-			//     ("uv", Element { offset: 8, format: TexCoord::FORMAT }),
-			//     ("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
+			//	   ("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
+			//	   ("uv", Element { offset: 8, format: TexCoord::FORMAT }),
+			//	   ("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
 			// ], PosTexCol::size() as ElemStride, 0)
 			.with_raw_vertex_buffer(PosTexCol::ATTRIBUTES, PosTexCol::size() as ElemStride, 0)
 			.with_texture("tex")
@@ -220,10 +233,10 @@ impl Pass for DrawUi {
 		// let vertex_args: VertexArgs = [2. / width, -2. / height, 0., 1.].into();
 
 		// let mut matrix: Matrix4<f32> = [
-		//     [(2.0 / width) as f32, 0.0, 0.0, 0.0],
-		//     [0.0, (2.0 / -height) as f32, 0.0, 0.0],
-		//     [0.0, 0.0, -1.0, 0.0],
-		//     [-1.0, 1.0, 0.0, 1.0],
+		//	   [(2.0 / width) as f32, 0.0, 0.0, 0.0],
+		//	   [0.0, (2.0 / -height) as f32, 0.0, 0.0],
+		//	   [0.0, 0.0, -1.0, 0.0],
+		//	   [-1.0, 1.0, 0.0, 1.0],
 		// ].into();
 		// Matrix4::append_nonuniform_scaling_mut(&mut matrix, &Vector3::new(width as f32, height as f32, 1.));
 		let matrix = [
@@ -235,7 +248,7 @@ impl Pass for DrawUi {
 		// let matrix: [[f32; 4]; 4] = Matrix4::from_scaled_axis(Vector3::new(width as f32, height as f32, 1.)).into();
 
 		if imgui_state.size.0 != width as u16 || imgui_state.size.1 != height as u16 {
-			let (texture, shader_resource_view, target) = factory.create_render_target::<gfx::format::Rgba8>(width as u16, height as u16).unwrap();
+			let (texture, shader_resource_view, target) = factory.create_render_target::<gfx::format::Srgba8>(width as u16, height as u16).unwrap();
 			renderer_thing.renderer.update_render_target(target);
 			renderer_thing.shader_resource_view = shader_resource_view;
 			renderer_thing.texture = texture;
@@ -243,7 +256,7 @@ impl Pass for DrawUi {
 
 		encoder.clear(
 			&factory
-				.view_texture_as_render_target::<gfx::format::Rgba8>(&renderer_thing.texture, 0, None)
+				.view_texture_as_render_target::<gfx::format::Srgba8>(&renderer_thing.texture, 0, None)
 				.unwrap(),
 			[0., 0., 0., 0.],
 		);
