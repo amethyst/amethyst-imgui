@@ -6,6 +6,7 @@ license = "CC0-1.0"
 authors = ["Awpteamoose <cargo@awpteamoose.my.to>"]
 repository = "https://github.com/Awpteamoose/amethyst-imgui"
 readme = "README.md"
+edition = "2018"
 
 [dependencies]
 amethyst = { git = "https://github.com/amethyst/amethyst.git" }

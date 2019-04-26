@@ -1,12 +1,8 @@
-extern crate amethyst;
-extern crate gfx;
-extern crate glsl_layout;
-pub extern crate imgui;
-extern crate imgui_gfx_renderer;
+#![allow(clippy::type_complexity)]
 
 use amethyst::{
 	core::{
-		math::{Vector2, Vector3, Vector4, Matrix4},
+		math::{Vector2, Vector4},
 		shrev::EventChannel,
 	},
 	ecs::{prelude::*, ReadExpect, Write},
@@ -17,42 +13,34 @@ use amethyst::{
 			Effect,
 			NewEffect,
 		},
+		Attribute,
+		Attributes,
+		Color,
 		Encoder,
 		Event,
 		Mesh,
-		// PosTex,
 		Resources,
+		TexCoord,
 		VertexFormat,
 		WindowMessages,
-		With,
-		Position,
-		TexCoord,
-		Color,
-		Attribute,
-		Attributes,
 	},
 	winit::MouseCursor,
 };
-use gfx::{memory::Typed, preset::blend, pso::buffer::{Element, ElemStride}, state::ColorMask, traits::Factory};
-use glsl_layout::{vec2, vec4, Uniform, Pod};
-use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImGuiMouseCursor};
-use imgui_gfx_renderer::{Renderer as ImguiRenderer};
 use gfx::{
-	format::{ChannelType, Format, SurfaceType},
+	format::{ChannelType, Format, Srgba8, SurfaceType},
+	memory::Typed,
+	preset::blend,
+	pso::buffer::{ElemStride, Element},
+	state::ColorMask,
+	traits::Factory,
 };
+use glsl_layout::Pod;
+pub use imgui;
+use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImGuiMouseCursor};
+use imgui_gfx_renderer::Renderer as ImguiRenderer;
 
 const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
 const FRAG_SRC: &[u8] = include_bytes!("shaders/frag.glsl");
-
-// #[derive(Copy, Clone, Debug, Uniform)]
-// #[allow(dead_code)] // This is used by the shaders
-// #[repr(C)]
-// struct VertexArgs {
-//	   proj_vec: vec4,
-//	   coord: vec2,
-//	   dimension: vec2,
-// }
-type VertexArgs = [[f32; 4]; 4];
 
 struct RendererThing {
 	renderer: ImguiRenderer<Resources>,
@@ -73,9 +61,6 @@ pub struct ImguiState {
 	pub size: (u16, u16),
 }
 
-// type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
-// type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
-
 impl<'a> PassData<'a> for DrawUi {
 	type Data = (ReadExpect<'a, amethyst::renderer::ScreenDimensions>, Write<'a, Option<ImguiState>>);
 }
@@ -83,11 +68,10 @@ impl<'a> PassData<'a> for DrawUi {
 #[derive(Default)]
 pub struct ImguiIni(Option<String>);
 impl ImguiIni {
-	pub fn new(path: &str) -> Self {
-		Self(Some(path.to_owned()))
-	}
+	pub fn new(path: &str) -> Self { Self(Some(path.to_owned())) }
 }
 
+#[allow(dead_code)]
 struct PosTexCol {
 	pos: Vector2<f32>,
 	uv: Vector2<f32>,
@@ -98,9 +82,6 @@ unsafe impl Pod for PosTexCol {}
 
 impl VertexFormat for PosTexCol {
 	const ATTRIBUTES: Attributes<'static> = &[
-		// ("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
-		// ("uv", Element { offset: 1, format: TexCoord::FORMAT }),
-		// ("col", Element { offset: 2, format: Color::FORMAT }),
 		("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
 		("uv", Element { offset: 8, format: TexCoord::FORMAT }),
 		("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
@@ -180,7 +161,7 @@ impl Pass for DrawUi {
 			},
 		];
 
-		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<gfx::format::Srgba8>(1024, 1024).unwrap();
+		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<Srgba8>(1024, 1024).unwrap();
 		let renderer = ImguiRenderer::init(&mut imgui, effect.factory, (VERT_SRC, FRAG_SRC), target).unwrap();
 		self.renderer = Some(RendererThing {
 			renderer,
@@ -192,13 +173,7 @@ impl Pass for DrawUi {
 
 		effect
 			.simple(VERT_SRC, FRAG_SRC)
-			// .with_raw_constant_buffer("matrix", std::mem::size_of::<<VertexArgs as Uniform>::Std140>(), 1)
 			.with_raw_global("matrix")
-			// .with_raw_vertex_buffer(&[
-			//	   ("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
-			//	   ("uv", Element { offset: 8, format: TexCoord::FORMAT }),
-			//	   ("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
-			// ], PosTexCol::size() as ElemStride, 0)
 			.with_raw_vertex_buffer(PosTexCol::ATTRIBUTES, PosTexCol::size() as ElemStride, 0)
 			.with_texture("tex")
 			.with_blended_output("Target0", ColorMask::all(), blend::ALPHA, None)
@@ -225,30 +200,15 @@ impl Pass for DrawUi {
 		}
 		let renderer_thing = self.renderer.as_mut().unwrap();
 
-		// let vertex_args = VertexArgs {
-		//	   proj_vec: [2. / width, -2. / height, 0., 1.].into(),
-		//	   coord: [0., 0.].into(),
-		//	   dimension: [width, height].into(),
-		// };
-		// let vertex_args: VertexArgs = [2. / width, -2. / height, 0., 1.].into();
-
-		// let mut matrix: Matrix4<f32> = [
-		//	   [(2.0 / width) as f32, 0.0, 0.0, 0.0],
-		//	   [0.0, (2.0 / -height) as f32, 0.0, 0.0],
-		//	   [0.0, 0.0, -1.0, 0.0],
-		//	   [-1.0, 1.0, 0.0, 1.0],
-		// ].into();
-		// Matrix4::append_nonuniform_scaling_mut(&mut matrix, &Vector3::new(width as f32, height as f32, 1.));
 		let matrix = [
 			[2.0, 0.0, 0.0, 0.0],
 			[0.0, -2.0, 0.0, 0.0],
 			[0.0, 0.0, -1.0, 0.0],
 			[-1.0, 1.0, 0.0, 1.0],
 		];
-		// let matrix: [[f32; 4]; 4] = Matrix4::from_scaled_axis(Vector3::new(width as f32, height as f32, 1.)).into();
 
 		if imgui_state.size.0 != width as u16 || imgui_state.size.1 != height as u16 {
-			let (texture, shader_resource_view, target) = factory.create_render_target::<gfx::format::Srgba8>(width as u16, height as u16).unwrap();
+			let (texture, shader_resource_view, target) = factory.create_render_target::<Srgba8>(width as u16, height as u16).unwrap();
 			renderer_thing.renderer.update_render_target(target);
 			renderer_thing.shader_resource_view = shader_resource_view;
 			renderer_thing.texture = texture;
@@ -256,7 +216,7 @@ impl Pass for DrawUi {
 
 		encoder.clear(
 			&factory
-				.view_texture_as_render_target::<gfx::format::Srgba8>(&renderer_thing.texture, 0, None)
+				.view_texture_as_render_target::<Srgba8>(&renderer_thing.texture, 0, None)
 				.unwrap(),
 			[0., 0., 0., 0.],
 		);
@@ -274,8 +234,6 @@ impl Pass for DrawUi {
 			effect.data.samplers.push(sampler);
 		}
 
-		// effect.update_constant_buffer("matrix", &matrix.std140(), encoder);
-		// effect.update_global("matrix", <Matrix4<f32> as Into<VertexArgs>>::into(matrix));
 		effect.update_global("matrix", matrix);
 		effect.data.textures.push(renderer_thing.shader_resource_view.raw().clone());
 		effect
@@ -380,7 +338,5 @@ pub struct EndFrame;
 impl<'s> amethyst::ecs::System<'s> for EndFrame {
 	type SystemData = ();
 
-	fn run(&mut self, _: Self::SystemData) {
-		with(|_| {});
-	}
+	fn run(&mut self, _: Self::SystemData) { with(|_| {}); }
 }

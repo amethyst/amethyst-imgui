@@ -14,3 +14,5 @@ use_try_shorthand = true
 edition = "2018"
 newline_style = "Unix"
 binop_separator = "Back"
+fn_single_line = true
+format_macro_bodies = false
