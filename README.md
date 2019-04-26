@@ -21,6 +21,12 @@ amethyst_imgui::with(|ui| {
 });
 ```
 
+# It's annoying that my window/widget state is reset:
+Add an `ImguiIni` resource.
+```rust
+world.add_resource(amethyst_imgui::ImguiIni::new("imgui.ini"));
+```
+
 # Example:
 ```
 cargo run --example demo_window
