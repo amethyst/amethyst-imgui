@@ -132,7 +132,7 @@ impl Pass for DrawUi {
 		];
 
 		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<FormattedT>(1024, 1024).unwrap();
-		let renderer = ImguiRenderer::init(&mut imgui, effect.factory, Shaders::GlSl130, target).unwrap();
+		let renderer = ImguiRenderer::init(&mut imgui, effect.factory, Shaders::GlSl150, target).unwrap();
 		self.renderer = Some(RendererThing {
 			renderer,
 			texture,
