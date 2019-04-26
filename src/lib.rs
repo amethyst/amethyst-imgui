@@ -6,7 +6,7 @@ extern crate imgui_gfx_renderer;
 
 use amethyst::{
 	core::{
-		math::{Vector2, Vector3, Vector4},
+		math::{Vector2, Vector3, Vector4, Matrix4},
 		shrev::EventChannel,
 	},
 	ecs::{prelude::*, ReadExpect, Write},
@@ -73,7 +73,8 @@ pub struct ImguiState {
 	pub size: (u16, u16),
 }
 
-type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
+// type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
+// type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
 
 impl<'a> PassData<'a> for DrawUi {
 	type Data = (ReadExpect<'a, amethyst::renderer::ScreenDimensions>, Write<'a, Option<ImguiState>>);
@@ -97,9 +98,12 @@ unsafe impl Pod for PosTexCol {}
 
 impl VertexFormat for PosTexCol {
 	const ATTRIBUTES: Attributes<'static> = &[
+		// ("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
+		// ("uv", Element { offset: 1, format: TexCoord::FORMAT }),
+		// ("col", Element { offset: 2, format: Color::FORMAT }),
 		("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
-		("uv", Element { offset: 1, format: TexCoord::FORMAT }),
-		("col", Element { offset: 2, format: Color::FORMAT }),
+		("uv", Element { offset: 8, format: TexCoord::FORMAT }),
+		("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
 	];
 }
 
@@ -163,7 +167,7 @@ impl Pass for DrawUi {
 			},
 		];
 
-		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<FormattedT>(1024, 1024).unwrap();
+		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<gfx::format::Rgba8>(1024, 1024).unwrap();
 		let renderer = ImguiRenderer::init(&mut imgui, effect.factory, (VERT_SRC, FRAG_SRC), target).unwrap();
 		self.renderer = Some(RendererThing {
 			renderer,
@@ -175,12 +179,14 @@ impl Pass for DrawUi {
 
 		effect
 			.simple(VERT_SRC, FRAG_SRC)
-			.with_raw_constant_buffer("matrix", std::mem::size_of::<<VertexArgs as Uniform>::Std140>(), 1)
-			.with_raw_vertex_buffer(&[
-				("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
-				("uv", Element { offset: 8, format: TexCoord::FORMAT }),
-				("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
-			], PosTexCol::size() as ElemStride, 0)
+			// .with_raw_constant_buffer("matrix", std::mem::size_of::<<VertexArgs as Uniform>::Std140>(), 1)
+			.with_raw_global("matrix")
+			// .with_raw_vertex_buffer(&[
+			//     ("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
+			//     ("uv", Element { offset: 8, format: TexCoord::FORMAT }),
+			//     ("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
+			// ], PosTexCol::size() as ElemStride, 0)
+			.with_raw_vertex_buffer(PosTexCol::ATTRIBUTES, PosTexCol::size() as ElemStride, 0)
 			.with_texture("tex")
 			.with_blended_output("Target0", ColorMask::all(), blend::ALPHA, None)
 			.build()
@@ -212,15 +218,24 @@ impl Pass for DrawUi {
 		//	   dimension: [width, height].into(),
 		// };
 		// let vertex_args: VertexArgs = [2. / width, -2. / height, 0., 1.].into();
+
+		// let mut matrix: Matrix4<f32> = [
+		//     [(2.0 / width) as f32, 0.0, 0.0, 0.0],
+		//     [0.0, (2.0 / -height) as f32, 0.0, 0.0],
+		//     [0.0, 0.0, -1.0, 0.0],
+		//     [-1.0, 1.0, 0.0, 1.0],
+		// ].into();
+		// Matrix4::append_nonuniform_scaling_mut(&mut matrix, &Vector3::new(width as f32, height as f32, 1.));
 		let matrix = [
-			[(2.0 / width) as f32, 0.0, 0.0, 0.0],
-			[0.0, (2.0 / -height) as f32, 0.0, 0.0],
+			[2.0, 0.0, 0.0, 0.0],
+			[0.0, -2.0, 0.0, 0.0],
 			[0.0, 0.0, -1.0, 0.0],
 			[-1.0, 1.0, 0.0, 1.0],
 		];
+		// let matrix: [[f32; 4]; 4] = Matrix4::from_scaled_axis(Vector3::new(width as f32, height as f32, 1.)).into();
 
 		if imgui_state.size.0 != width as u16 || imgui_state.size.1 != height as u16 {
-			let (texture, shader_resource_view, target) = factory.create_render_target::<FormattedT>(width as u16, height as u16).unwrap();
+			let (texture, shader_resource_view, target) = factory.create_render_target::<gfx::format::Rgba8>(width as u16, height as u16).unwrap();
 			renderer_thing.renderer.update_render_target(target);
 			renderer_thing.shader_resource_view = shader_resource_view;
 			renderer_thing.texture = texture;
@@ -228,7 +243,7 @@ impl Pass for DrawUi {
 
 		encoder.clear(
 			&factory
-				.view_texture_as_render_target::<FormattedT>(&renderer_thing.texture, 0, None)
+				.view_texture_as_render_target::<gfx::format::Rgba8>(&renderer_thing.texture, 0, None)
 				.unwrap(),
 			[0., 0., 0., 0.],
 		);
@@ -246,7 +261,9 @@ impl Pass for DrawUi {
 			effect.data.samplers.push(sampler);
 		}
 
-		effect.update_constant_buffer("matrix", &matrix.std140(), encoder);
+		// effect.update_constant_buffer("matrix", &matrix.std140(), encoder);
+		// effect.update_global("matrix", <Matrix4<f32> as Into<VertexArgs>>::into(matrix));
+		effect.update_global("matrix", matrix);
 		effect.data.textures.push(renderer_thing.shader_resource_view.raw().clone());
 		effect
 			.data
