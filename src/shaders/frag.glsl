@@ -1,15 +1,11 @@
 #version 150 core
 
-uniform sampler2D albedo;
+uniform sampler2D tex;
 
 in vec2 f_uv;
 
-out vec4 color;
+out vec4 Target0;
 
 void main() {
-	color = texture(albedo, f_uv.st);
-	color.r = pow(color.r, 2.2);
-	color.g = pow(color.g, 2.2);
-	color.b = pow(color.b, 2.2);
-	color.a = 1.0 - pow(1.0 - color.a, 2.2);
+	Target0 = f_color * texture(tex, f_uv.st);
 }
