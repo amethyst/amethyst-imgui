@@ -1,14 +1,27 @@
 extern crate amethyst;
 extern crate amethyst_imgui;
-
+use std::sync::Arc;
 use amethyst::{
-	ecs::{ReadExpect, Write},
+	ecs::{ReadExpect, Resources, SystemData},
 	prelude::*,
-	renderer::{DisplayConfig, DrawFlat2D, Pipeline, RenderBundle, Stage},
 	utils::application_root_dir,
+	renderer::{
+		rendy::{
+			factory::Factory,
+			graph::{
+				render::{RenderGroupDesc, SubpassBuilder},
+				GraphBuilder,
+			},
+			hal::{format::Format, image},
+		},
+		types::DefaultBackend,
+		GraphCreator, RenderingSystem,
+	},
+	window::{Window, WindowBundle, ScreenDimensions},
 };
 
-use amethyst_imgui::{imgui, ImguiState};
+use amethyst_imgui::{imgui, DrawImguiDesc};
+
 
 #[derive(Default, Clone, Copy)]
 pub struct ImguiUseSystem;
@@ -35,28 +48,112 @@ impl<'s> amethyst::ecs::System<'s> for ImguiUseSystem {
 
 struct Example;
 impl SimpleState for Example {
-	fn on_start(&mut self, _: StateData<'_, GameData<'_, '_>>) {}
+	fn on_start(&mut self, _: StateData<'_, GameData<'_, '_>>) {
+
+	}
 }
 
-fn main() -> amethyst::Result<()> {
-	amethyst::start_logger(amethyst::LoggerConfig::default());
 
-	let pipe = Pipeline::build().with_stage(
-		Stage::with_backbuffer()
-			.clear_target([0.1, 0.1, 0.1, 1.0], 1.0)
-			.with_pass(DrawFlat2D::new())
-			.with_pass(amethyst_imgui::DrawUi::default()),
-	);
+fn main() -> amethyst::Result<()> {
+	amethyst::start_logger(Default::default());
+	let app_root = application_root_dir()?;
+	let display_config_path = app_root.join("examples/display.ron");
 
 	let game_data = GameDataBuilder::default()
+		.with_bundle(WindowBundle::from_config_path(display_config_path))?
 		.with(amethyst_imgui::BeginFrame::default(), "imgui_begin", &[])
+		.with(ImguiUseSystem::default(), "imgui_use", &["imgui_begin"])
 		.with_barrier()
-		.with(ImguiUseSystem::default(), "imgui_use", &[])
-		.with_bundle(RenderBundle::new(pipe, Some(DisplayConfig::default())))?
-		.with_barrier()
-		.with(amethyst_imgui::EndFrame::default(), "imgui_end", &[]);
+		.with(amethyst_imgui::EndFrame::default(), "imgui_end", &[ "imgui_begin"])
+		.with_thread_local(RenderingSystem::<DefaultBackend, _>::new(
+			ExampleGraph::new(),
+		));
 
 	Application::build("/", Example)?.build(game_data)?.run();
 
 	Ok(())
+}
+
+
+struct ExampleGraph {
+	dimensions: Option<ScreenDimensions>,
+	surface_format: Option<Format>,
+	dirty: bool,
+}
+
+impl ExampleGraph {
+	pub fn new() -> Self {
+		Self {
+			dimensions: None,
+			surface_format: None,
+			dirty: true,
+		}
+	}
+}
+
+impl GraphCreator<DefaultBackend> for ExampleGraph {
+	fn rebuild(&mut self, res: &Resources) -> bool {
+		// Rebuild when dimensions change, but wait until at least two frames have the same.
+		let new_dimensions = res.try_fetch::<ScreenDimensions>();
+		use std::ops::Deref;
+		if self.dimensions.as_ref() != new_dimensions.as_ref().map(|d| d.deref()) {
+			self.dirty = true;
+			self.dimensions = new_dimensions.map(|d| d.clone());
+			return false;
+		}
+		return self.dirty;
+	}
+
+	fn builder(
+		&mut self,
+		factory: &mut Factory<DefaultBackend>,
+		res: &Resources,
+	) -> GraphBuilder<DefaultBackend, Resources> {
+		use amethyst::renderer::rendy::{
+			graph::present::PresentNode,
+			hal::command::{ClearDepthStencil, ClearValue},
+		};
+
+		self.dirty = false;
+
+		let window = <ReadExpect<'_, Arc<Window>>>::fetch(res);
+		let surface = factory.create_surface(&window);
+		// cache surface format to speed things up
+		let surface_format = *self
+			.surface_format
+			.get_or_insert_with(|| factory.get_surface_format(&surface));
+
+		let mut graph_builder = GraphBuilder::new();
+		let dimensions = self.dimensions.as_ref().unwrap();
+
+		let window_kind =
+			image::Kind::D2(dimensions.width() as u32, dimensions.height() as u32, 1, 1);
+
+		let color = graph_builder.create_image(
+			window_kind,
+			1,
+			surface_format,
+			Some(ClearValue::Color([0.34, 0.36, 0.52, 1.0].into())),
+		);
+
+		let depth = graph_builder.create_image(
+			window_kind,
+			1,
+			Format::D32Sfloat,
+			Some(ClearValue::DepthStencil(ClearDepthStencil(1.0, 0))),
+		);
+
+		let imgui = graph_builder.add_node(
+			SubpassBuilder::new()
+				.with_group(DrawImguiDesc::default().builder())
+				.with_color(color)
+				.with_depth_stencil(depth)
+				.into_pass(),
+		);
+
+		let _present = graph_builder
+			.add_node(PresentNode::builder(factory, surface, color).with_dependency(imgui));
+
+		graph_builder
+	}
 }

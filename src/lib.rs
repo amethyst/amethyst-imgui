@@ -1,107 +1,71 @@
+#![feature(custom_attribute)]
+
 #![allow(clippy::type_complexity)]
 
 use amethyst::{
+	assets::{Loader, AssetStorage, Handle},
 	core::{
 		math::{Vector2, Vector4},
 		shrev::EventChannel,
 	},
+	renderer::{
+		formats::texture::{ImageFormat},
+		Texture,
+		rendy::{
+			texture::{image,},
+		}
+	},
 	ecs::{prelude::*, ReadExpect, Write},
 	error::Error,
-	renderer::{
-		pipe::{
-			pass::{Pass, PassData},
-			Effect,
-			NewEffect,
-		},
-		Attribute,
-		Attributes,
-		Color,
-		Encoder,
-		Event,
-		Mesh,
-		Resources,
-		TexCoord,
-		VertexFormat,
-		WindowMessages,
-	},
-	winit::MouseCursor,
+	window::{ScreenDimensions},
+	winit::{MouseCursor, Event},
 };
-use gfx::{
-	format::{ChannelType, Format, Srgba8, SurfaceType},
-	memory::Typed,
-	preset::blend,
-	pso::buffer::{ElemStride, Element},
-	state::ColorMask,
-	traits::Factory,
-};
-use glsl_layout::Pod;
 pub use imgui;
 use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImGuiMouseCursor};
-use imgui_gfx_renderer::Renderer as ImguiRenderer;
 
-const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
-const FRAG_SRC: &[u8] = include_bytes!("shaders/frag.glsl");
-const FRAG_CORRECT_SRC: &[u8] = include_bytes!("shaders/frag-correct.glsl");
-
-struct RendererThing {
-	renderer: ImguiRenderer<Resources>,
-	texture: gfx::handle::Texture<Resources, gfx::format::R8_G8_B8_A8>,
-	shader_resource_view: gfx::handle::ShaderResourceView<Resources, [f32; 4]>,
-	mesh: Mesh,
-}
-
-#[derive(Default)]
-pub struct DrawUi {
-	imgui: Option<ImGui>,
-	renderer: Option<RendererThing>,
-}
+mod pass;
+pub use pass::DrawImguiDesc;
 
 pub struct ImguiState {
 	pub imgui: ImGui,
 	pub mouse_state: MouseState,
 	pub size: (u16, u16),
+	pub config: ImguiConfig,
+	pub textures: Vec<Handle<Texture>>,
 }
 
-impl<'a> PassData<'a> for DrawUi {
-	type Data = (ReadExpect<'a, amethyst::renderer::ScreenDimensions>, Write<'a, Option<ImguiState>>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImguiConfig {
+	pub font_size: f32,
+	ini: Option<String>,
+	font: Vec<u8>,
 }
-
-#[derive(Default)]
-pub struct ImguiIni(Option<String>);
-impl ImguiIni {
-	pub fn new(path: &str) -> Self { Self(Some(path.to_owned())) }
+impl Default for ImguiConfig {
+	fn default() -> Self {
+		Self {
+			font: include_bytes!("../mplus-1p-regular.ttf").to_vec(),
+			font_size: 13.,
+			ini: None,
+		}
+	}
 }
+impl ImguiState {
+	pub fn new(res: &mut amethyst::ecs::Resources, config: ImguiConfig) -> Self {
+		type SetupData<'a> = (Read<'a, AssetStorage<Texture>>);
+		SetupData::setup(res);
 
-#[allow(dead_code)]
-struct PosTexCol {
-	pos: Vector2<f32>,
-	uv: Vector2<f32>,
-	col: Vector4<f32>,
-}
-
-unsafe impl Pod for PosTexCol {}
-
-impl VertexFormat for PosTexCol {
-	const ATTRIBUTES: Attributes<'static> = &[
-		("pos", Element { offset: 0, format: Format(SurfaceType::R32_G32, ChannelType::Float) }),
-		("uv", Element { offset: 8, format: TexCoord::FORMAT }),
-		("col", Element { offset: 8 + TexCoord::SIZE, format: Color::FORMAT }),
-	];
-}
-
-impl Pass for DrawUi {
-	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect, Error> {
+		// Initialize everything
 		let mut imgui = ImGui::init();
 
-		imgui.set_ini_filename(None);
+		imgui.set_ini_filename(config.ini.as_ref().map(|i| imgui::ImString::new(i) ));
 
-		let font_size = 13.;
+
 		let _ = imgui.fonts().add_font_with_config(
-			include_bytes!("../mplus-1p-regular.ttf"),
+			&config.font,
 			ImFontConfig::new()
 				.oversample_h(1)
 				.pixel_snap_h(true)
-				.size_pixels(font_size)
+				.size_pixels(config.font_size)
 				.rasterizer_multiply(1.75),
 			&FontGlyphRange::japanese(),
 		);
@@ -111,128 +75,64 @@ impl Pass for DrawUi {
 				.merge_mode(true)
 				.oversample_h(1)
 				.pixel_snap_h(true)
-				.size_pixels(font_size),
+				.size_pixels(config.font_size),
 		);
 
-		imgui_winit_support::configure_keys(&mut imgui);
+		let texture_handle = imgui.prepare_texture(|handle| {
+			let loader = res.fetch_mut::<Loader>();
+			let texture_storage = res.fetch_mut::<AssetStorage<Texture>>();
 
-		let data = vec![
-			PosTexCol {
-				pos: Vector2::new(0., 1.),
-				uv: Vector2::new(0., 0.),
-				col: Vector4::new(1., 1., 1., 1.),
-			},
-			PosTexCol {
-				pos: Vector2::new(1., 1.),
-				uv: Vector2::new(1., 0.),
-				col: Vector4::new(1., 1., 1., 1.),
-			},
-			PosTexCol {
-				pos: Vector2::new(1., 0.),
-				uv: Vector2::new(1., 1.),
-				col: Vector4::new(1., 1., 1., 1.),
-			},
-			PosTexCol {
-				pos: Vector2::new(0., 1.),
-				uv: Vector2::new(0., 0.),
-				col: Vector4::new(1., 1., 1., 1.),
-			},
-			PosTexCol {
-				pos: Vector2::new(1., 0.),
-				uv: Vector2::new(1., 1.),
-				col: Vector4::new(1., 1., 1., 1.),
-			},
-			PosTexCol {
-				pos: Vector2::new(0., 0.),
-				uv: Vector2::new(0., 1.),
-				col: Vector4::new(1., 1., 1., 1.),
-			},
-		];
+			use amethyst::renderer::{
+				types::TextureData,
+				rendy::{
+					texture::TextureBuilder,
+					hal::image
+				}
+			};
 
-		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<Srgba8>(1024, 1024).unwrap();
-		let renderer = ImguiRenderer::init(&mut imgui, effect.factory, (VERT_SRC, FRAG_SRC), target).unwrap();
-		self.renderer = Some(RendererThing {
-			renderer,
-			texture,
-			shader_resource_view,
-			mesh: Mesh::build(data).build(&mut effect.factory)?,
+			use amethyst::renderer::rendy::{
+				hal::image::{Anisotropic, PackedColor, SamplerInfo, WrapMode, Filter},
+				hal::format::Format,
+				texture::image::{Repr, TextureKind},
+			};
+
+			let texture_builder = TextureBuilder::new()
+				.with_data_width(handle.width)
+				.with_data_height(handle.height)
+				.with_kind(image::Kind::D2(handle.width, handle.height, 1, 1))
+				.with_view_kind(image::ViewKind::D2)
+				.with_sampler_info(SamplerInfo {
+					min_filter: Filter::Linear,
+					mag_filter: Filter::Linear,
+					mip_filter: Filter::Linear,
+					wrap_mode: (WrapMode::Clamp, WrapMode::Clamp, WrapMode::Clamp),
+					lod_bias: 0.0.into(),
+					lod_range: std::ops::Range {
+						start: 0.0.into(),
+						end: 8000.0.into(),
+					},
+					comparison: None,
+					border: PackedColor(0),
+					anisotropic: Anisotropic::Off,
+				})
+				.with_raw_data(handle.pixels, Format::Rgba8Unorm);
+
+			let tex: Handle<Texture> = loader.load_from_data(
+				TextureData(texture_builder),
+				(),
+				&texture_storage,
+			);
+			tex
 		});
-		self.imgui = Some(imgui);
 
-		effect
-			.simple(VERT_SRC, FRAG_CORRECT_SRC)
-			.with_raw_global("matrix")
-			.with_raw_vertex_buffer(PosTexCol::ATTRIBUTES, PosTexCol::size() as ElemStride, 0)
-			.with_texture("tex")
-			.with_blended_output("Target0", ColorMask::all(), blend::ALPHA, None)
-			.build()
-	}
 
-	fn apply<'ui, 'apply_pd: 'ui>(
-		&'ui mut self,
-		encoder: &mut Encoder,
-		effect: &mut Effect,
-		mut factory: amethyst::renderer::Factory,
-		(screen_dimensions, mut imgui_state): <Self as PassData<'apply_pd>>::Data,
-	) {
-		let imgui_state = imgui_state.get_or_insert_with(|| ImguiState {
-			imgui: self.imgui.take().unwrap(),
+		Self {
+			imgui,
 			mouse_state: MouseState::default(),
 			size: (1024, 1024),
-		});
-		imgui_state.imgui.set_font_global_scale(screen_dimensions.hidpi_factor() as f32);
-
-		let (width, height) = (screen_dimensions.width(), screen_dimensions.height());
-		if width <= 0. || height <= 0. {
-			return;
+			config,
+			textures: vec![texture_handle],
 		}
-		let renderer_thing = self.renderer.as_mut().unwrap();
-
-		let matrix = [
-			[2.0, 0.0, 0.0, 0.0],
-			[0.0, -2.0, 0.0, 0.0],
-			[0.0, 0.0, -1.0, 0.0],
-			[-1.0, 1.0, 0.0, 1.0],
-		];
-
-		if imgui_state.size.0 != width as u16 || imgui_state.size.1 != height as u16 {
-			let (texture, shader_resource_view, target) = factory.create_render_target::<Srgba8>(width as u16, height as u16).unwrap();
-			renderer_thing.renderer.update_render_target(target);
-			renderer_thing.shader_resource_view = shader_resource_view;
-			renderer_thing.texture = texture;
-		}
-
-		encoder.clear(
-			&factory
-				.view_texture_as_render_target::<Srgba8>(&renderer_thing.texture, 0, None)
-				.unwrap(),
-			[0., 0., 0., 0.],
-		);
-
-		unsafe {
-			if let Some(ui) = imgui::Ui::current_ui() {
-				let ui = ui as *const imgui::Ui;
-				renderer_thing.renderer.render(ui.read(), &mut factory, encoder).unwrap();
-			}
-		}
-
-		{
-			use gfx::texture::{FilterMethod, SamplerInfo, WrapMode};
-			let sampler = factory.create_sampler(SamplerInfo::new(FilterMethod::Trilinear, WrapMode::Clamp));
-			effect.data.samplers.push(sampler);
-		}
-
-		effect.update_global("matrix", matrix);
-		effect.data.textures.push(renderer_thing.shader_resource_view.raw().clone());
-		effect
-			.data
-			.vertex_bufs
-			.push(renderer_thing.mesh.buffer(PosTexCol::ATTRIBUTES).unwrap().clone());
-
-		effect.draw(renderer_thing.mesh.slice(), encoder);
-
-		effect.data.textures.clear();
-		effect.data.samplers.clear();
 	}
 }
 
@@ -252,6 +152,7 @@ pub fn with(f: impl FnOnce(&imgui::Ui)) {
 	}
 }
 
+/*
 fn update_mouse_cursor(imgui: &ImGui, messages: &mut WindowMessages) {
 	let mouse_cursor = imgui.mouse_cursor();
 	if imgui.mouse_draw_cursor() || mouse_cursor == ImGuiMouseCursor::None {
@@ -273,6 +174,7 @@ fn update_mouse_cursor(imgui: &ImGui, messages: &mut WindowMessages) {
 		});
 	}
 }
+*/
 
 #[derive(Default)]
 pub struct BeginFrame {
@@ -281,37 +183,43 @@ pub struct BeginFrame {
 impl<'s> amethyst::ecs::System<'s> for BeginFrame {
 	type SystemData = (
 		Read<'s, EventChannel<Event>>,
-		ReadExpect<'s, amethyst::renderer::ScreenDimensions>,
+		ReadExpect<'s, ScreenDimensions>,
 		ReadExpect<'s, amethyst::core::timing::Time>,
-		Write<'s, Option<ImguiState>>,
-		Write<'s, WindowMessages>,
-		Read<'s, ImguiIni>,
+		WriteExpect<'s, ImguiState>,
 	);
 
 	fn setup(&mut self, res: &mut amethyst::ecs::Resources) {
 		Self::SystemData::setup(res);
+
 		self.reader = Some(res.fetch_mut::<EventChannel<Event>>().register_reader());
+
+		let state = ImguiState::new(res, ImguiConfig::default());
+		res.insert(state);
+
 	}
 
-	fn run(&mut self, (events, dimensions, time, mut imgui_state, mut window_messages, ini_path): Self::SystemData) {
-		let dimensions: &amethyst::renderer::ScreenDimensions = &dimensions;
+	fn run(&mut self, (events, dimensions, time, mut imgui_state): Self::SystemData) {
+		let dimensions: &ScreenDimensions = &dimensions;
 		let time: &amethyst::core::timing::Time = &time;
 
 		if dimensions.width() <= 0. || dimensions.height() <= 0. {
 			return;
 		}
 
-		let imgui_state = if let Some(x) = &mut imgui_state as &mut Option<ImguiState> { x } else { return; };
-
-		if let Some(path) = &ini_path.0 {
-			imgui_state.imgui.set_ini_filename(Some(imgui::ImString::new(path.clone())));
+		if imgui_state.size.0 != dimensions.width() as u16 || imgui_state.size.1 != dimensions.height() as u16 {
+			imgui_state.size = (dimensions.width() as u16, dimensions.height() as u16);
 		}
+
+		//if let Some(path) = &ini_path.0 {
+		//	imgui_state.imgui.set_ini_filename(Some(imgui::ImString::new(path.clone())));
+		//}
 
 		let dpi = dimensions.hidpi_factor();
 		for event in events.read(self.reader.as_mut().unwrap()) {
-			imgui_winit_support::handle_event(&mut imgui_state.imgui, &event, dpi as f64, dpi as f64);
+			// TODO: This is broken because of winit versions
+		    //	imgui_winit_support::handle_event(&mut imgui_state.imgui, event, dpi as f64, dpi as f64);
 		}
-		update_mouse_cursor(&imgui_state.imgui, &mut window_messages);
+		//update_mouse_cursor(&imgui_state.imgui, &mut window_messages);
 
 		let frame = imgui_state.imgui.frame(
 			imgui::FrameSize::new(f64::from(dimensions.width()), f64::from(dimensions.height()), dpi),
