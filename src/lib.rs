@@ -5,23 +5,17 @@
 use amethyst::{
 	assets::{Loader, AssetStorage, Handle},
 	core::{
-		math::{Vector2, Vector4},
 		shrev::EventChannel,
 	},
 	renderer::{
-		formats::texture::{ImageFormat},
 		Texture,
-		rendy::{
-			texture::{image,},
-		}
 	},
-	ecs::{prelude::*, ReadExpect, Write},
-	error::Error,
+	ecs::{prelude::*, ReadExpect},
 	window::{ScreenDimensions},
-	winit::{MouseCursor, Event},
+	winit::Event,
 };
 pub use imgui;
-use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImGuiMouseCursor};
+use imgui::{FontGlyphRange, ImFontConfig, ImGui};
 
 mod pass;
 pub use pass::DrawImguiDesc;
@@ -109,7 +103,7 @@ impl ImguiState {
 					lod_bias: 0.0.into(),
 					lod_range: std::ops::Range {
 						start: 0.0.into(),
-						end: 8000.0.into(),
+						end: 1000.0.into(),
 					},
 					comparison: None,
 					border: PackedColor(0),

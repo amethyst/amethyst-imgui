@@ -9,7 +9,7 @@ use amethyst::{
     renderer::{
         batch::{GroupIterator, OneLevelBatch, OrderedOneLevelBatch},
         pipeline::{PipelineDescBuilder, PipelinesBuilder},
-        submodules::{DynamicBuffer, FlatEnvironmentSub, TextureId, TextureSub},
+        submodules::{DynamicIndexBuffer, DynamicVertexBuffer, FlatEnvironmentSub, TextureId, TextureSub},
         transparent::Transparent,
         types::{Texture, Backend},
         util,
@@ -188,8 +188,8 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
     ) -> Result<Box<dyn RenderGroup<B, Resources>>, failure::Error> {
         let env = FlatEnvironmentSub::new(factory)?;
         let textures = TextureSub::new(factory)?;
-        let vertex = DynamicBuffer::new(hal::buffer::Usage::VERTEX);
-        let index = DynamicBuffer::new(hal::buffer::Usage::INDEX);
+        let vertex = DynamicVertexBuffer::new();
+        let index = DynamicIndexBuffer::new();
 
         let (pipeline, pipeline_layout) = build_imgui_pipeline(
             factory,
@@ -225,8 +225,8 @@ struct DrawCmd {
 pub struct DrawImgui<B: Backend> {
     pipeline: B::GraphicsPipeline,
     pipeline_layout: B::PipelineLayout,
-    vertex: DynamicBuffer<B, ImguiArgs>,
-    index: DynamicBuffer<B, u16>,
+    vertex: DynamicVertexBuffer<B, ImguiArgs>,
+    index: DynamicIndexBuffer<B, u16>,
     batches: OrderedOneLevelBatch<TextureId, ImguiArgs>,
     textures: TextureSub<B>,
     commands: Vec<DrawCmd>,
@@ -276,8 +276,8 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
                             scissor: hal::pso::Rect {
                                 x: draw_cmd.clip_rect.x as i16,
                                 y: draw_cmd.clip_rect.y as i16,
-                                w: draw_cmd.clip_rect.z as i16,
-                                h: draw_cmd.clip_rect.w as i16,
+                                w: (draw_cmd.clip_rect.z - draw_cmd.clip_rect.x) as i16,
+                                h: (draw_cmd.clip_rect.w - draw_cmd.clip_rect.y) as i16,
                             },
                             texture_id: TextureId(draw_cmd.texture_id as u32),
                         });
@@ -285,22 +285,6 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 
                     vertices.extend(draw_list.vtx_buffer.iter().map(|v| (*v).into()).collect::<Vec<ImguiArgs>>());
                     indices.extend(draw_list.idx_buffer.iter().map(|v| (*v).into()).collect::<Vec<u16>>());
-
-                    draw_list.vtx_buffer[0..5].iter().enumerate().for_each(|(i,  v)| {
-                        println!("{} = {:?}", i, v);
-                    });
-
-                    vertices[vertices.len()-draw_list.vtx_buffer.len()..vertices.len()-draw_list.vtx_buffer.len() + 5].iter().enumerate().for_each(|(i,  v)| {
-                        println!("{} = {:?}", i, v);
-                    });
-
-                    draw_list.idx_buffer[0..5].iter().enumerate().for_each(|(i,  v)| {
-                        println!("{} = {:?}", i, v);
-                    });
-
-                    indices[indices.len()-draw_list.idx_buffer.len()..indices.len()-draw_list.idx_buffer.len() + 5].iter().enumerate().for_each(|(i,  v)| {
-                        println!("{} = {:?}", i, v);
-                    });
                 }
 
                 self.vertex.write(factory, index, vertices.len() as u64, &[vertices.iter()]);
@@ -335,16 +319,17 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
         )>::fetch(resources);
 
         let layout = &self.pipeline_layout;
-        encoder.bind_graphics_pipeline(&self.pipeline);
 
-        encoder.push_constants(layout, pso::ShaderStageFlags::VERTEX, 0, hal::memory::cast_slice::<f32, u32>(self.constant.raw()));
-
-        self.vertex.bind(index, 0, &mut encoder);
-        self.index.bind(index, 0, &mut encoder);
 
         for draw in &self.commands {
-            println!("Drawing: {:?}", draw);
             encoder.set_scissors(0, &[draw.scissor]);
+
+            encoder.bind_graphics_pipeline(&self.pipeline);
+
+            encoder.push_constants(layout, pso::ShaderStageFlags::VERTEX, 0, hal::memory::cast_slice::<f32, u32>(self.constant.raw()));
+
+            self.vertex.bind(index, 0, 0, &mut encoder);
+            self.index.bind(index, 0, 0, &mut encoder);
 
             if self.textures.loaded(draw.texture_id) {
                 self.textures.bind(layout, 0, draw.texture_id, &mut encoder);
@@ -393,6 +378,14 @@ fn build_imgui_pipeline<B: Backend>(
             PipelineDescBuilder::new()
                 .with_vertex_desc(&[(ImguiArgs::vertex(), pso::VertexInputRate::Instance(1))])
                 .with_input_assembler(pso::InputAssemblerDesc::new(hal::Primitive::TriangleStrip))
+                .with_rasterizer(hal::pso::Rasterizer {
+                    polygon_mode: hal::pso::PolygonMode::Fill,
+                    cull_face: hal::pso::Face::NONE,
+                    front_face: hal::pso::FrontFace::Clockwise,
+                    depth_clamping: false,
+                    depth_bias: None,
+                    conservative: false,
+                })
                 .with_shaders(util::simple_shader_set(
                     &shader_vertex,
                     Some(&shader_fragment),
