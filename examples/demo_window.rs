@@ -1,10 +1,8 @@
 extern crate amethyst;
 extern crate amethyst_imgui;
-use std::sync::Arc;
 use amethyst::{
 	ecs::{ReadExpect, Resources, SystemData},
 	prelude::*,
-	utils::application_root_dir,
 	renderer::{
 		rendy::{
 			factory::Factory,
@@ -15,13 +13,14 @@ use amethyst::{
 			hal::{format::Format, image},
 		},
 		types::DefaultBackend,
-		GraphCreator, RenderingSystem,
+		GraphCreator,
+		RenderingSystem,
 	},
-	window::{Window, WindowBundle, ScreenDimensions},
+	utils::application_root_dir,
+	window::{ScreenDimensions, Window, WindowBundle},
 };
 
 use amethyst_imgui::{imgui, DrawImguiDesc};
-
 
 #[derive(Default, Clone, Copy)]
 pub struct ImguiUseSystem;
@@ -48,11 +47,8 @@ impl<'s> amethyst::ecs::System<'s> for ImguiUseSystem {
 
 struct Example;
 impl SimpleState for Example {
-	fn on_start(&mut self, _: StateData<'_, GameData<'_, '_>>) {
-
-	}
+	fn on_start(&mut self, _: StateData<'_, GameData<'_, '_>>) {}
 }
-
 
 fn main() -> amethyst::Result<()> {
 	amethyst::start_logger(Default::default());
@@ -64,16 +60,13 @@ fn main() -> amethyst::Result<()> {
 		.with(amethyst_imgui::BeginFrame::default(), "imgui_begin", &[])
 		.with(ImguiUseSystem::default(), "imgui_use", &["imgui_begin"])
 		.with_barrier()
-		.with(amethyst_imgui::EndFrame::default(), "imgui_end", &[ "imgui_begin"])
-		.with_thread_local(RenderingSystem::<DefaultBackend, _>::new(
-			ExampleGraph::new(),
-		));
+		.with(amethyst_imgui::EndFrame::default(), "imgui_end", &["imgui_begin"])
+		.with_thread_local(RenderingSystem::<DefaultBackend, _>::new(ExampleGraph::new()));
 
 	Application::build("/", Example)?.build(game_data)?.run();
 
 	Ok(())
 }
-
 
 struct ExampleGraph {
 	dimensions: Option<ScreenDimensions>,
@@ -104,11 +97,7 @@ impl GraphCreator<DefaultBackend> for ExampleGraph {
 		return self.dirty;
 	}
 
-	fn builder(
-		&mut self,
-		factory: &mut Factory<DefaultBackend>,
-		res: &Resources,
-	) -> GraphBuilder<DefaultBackend, Resources> {
+	fn builder(&mut self, factory: &mut Factory<DefaultBackend>, res: &Resources) -> GraphBuilder<DefaultBackend, Resources> {
 		use amethyst::renderer::rendy::{
 			graph::present::PresentNode,
 			hal::command::{ClearDepthStencil, ClearValue},
@@ -119,15 +108,12 @@ impl GraphCreator<DefaultBackend> for ExampleGraph {
 		let window = <ReadExpect<'_, Window>>::fetch(res);
 		let surface = factory.create_surface(&window);
 		// cache surface format to speed things up
-		let surface_format = *self
-			.surface_format
-			.get_or_insert_with(|| factory.get_surface_format(&surface));
+		let surface_format = *self.surface_format.get_or_insert_with(|| factory.get_surface_format(&surface));
 
 		let mut graph_builder = GraphBuilder::new();
 		let dimensions = self.dimensions.as_ref().unwrap();
 
-		let window_kind =
-			image::Kind::D2(dimensions.width() as u32, dimensions.height() as u32, 1, 1);
+		let window_kind = image::Kind::D2(dimensions.width() as u32, dimensions.height() as u32, 1, 1);
 
 		let color = graph_builder.create_image(
 			window_kind,
@@ -151,8 +137,7 @@ impl GraphCreator<DefaultBackend> for ExampleGraph {
 				.into_pass(),
 		);
 
-		let _present = graph_builder
-			.add_node(PresentNode::builder(factory, surface, color).with_dependency(imgui));
+		let _present = graph_builder.add_node(PresentNode::builder(factory, surface, color).with_dependency(imgui));
 
 		graph_builder
 	}
