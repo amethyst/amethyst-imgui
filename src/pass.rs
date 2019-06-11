@@ -14,7 +14,7 @@ use amethyst::{
         types::{Texture, Backend},
         util,
         rendy::{
-            mesh::{AsAttribute, AsVertex, TexCoord, VertexFormat},
+            mesh::{AsAttribute, AsVertex, TexCoord, VertexFormat, Color},
             shader::{SpirvShader,},
             command::{QueueId, RenderPassEncoder},
             factory::Factory,
@@ -90,6 +90,12 @@ pub struct ImguiPushConstant {
     inner: Vector4<f32>,
 }
 impl ImguiPushConstant {
+    pub fn new(scale_x: f32, scale_y: f32, trans_x: f32, trans_y: f32) -> Self {
+        Self {
+            inner: Vector4::new(scale_x, scale_y, trans_x, trans_y),
+        }
+    }
+
     pub fn raw(&self) -> &[f32] {
         &self.inner.data
     }
@@ -106,11 +112,9 @@ impl ImguiPushConstant {
         self.inner.x = scale.x;
         self.inner.y = scale.y;
     }
-    pub fn set_translation(&mut self, scale: Vector2<f32>,) {
-        self.inner.z = scale.x;
-        self.inner.w = scale.y;
-
-        let test = TextureId(123);
+    pub fn set_translation(&mut self, translation: Vector2<f32>,) {
+        self.inner.z = translation.x;
+        self.inner.w = translation.y;
 
     }
 }
@@ -131,12 +135,12 @@ pub struct ImguiArgs {
     pub position: TexCoord,
     /// UV texture coordinates used by the vertex.
     pub tex_coord: TexCoord,
-    pub color: ImguiColor,
+    pub color: Color,
 }
 
 impl AsVertex for ImguiArgs {
     fn vertex() -> VertexFormat {
-        VertexFormat::new((TexCoord::vertex(), TexCoord::vertex(), ImguiColor::vertex()))
+        VertexFormat::new((TexCoord::vertex(), TexCoord::vertex(), Color::vertex()))
     }
 }
 
@@ -145,7 +149,7 @@ impl From<ImDrawVert> for ImguiArgs {
         ImguiArgs {
             position: [v.pos.x, v.pos.y].into(),
             tex_coord: [v.uv.x, v.uv.y].into(),
-            color: v.col.into(),
+            color: normalize(v.col).into(),
         }
     }
 }
@@ -196,7 +200,6 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
             subpass,
             framebuffer_width,
             framebuffer_height,
-            false,
             vec![textures.raw_layout()],
         )?;
 
@@ -268,6 +271,10 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 
                 self.commands.reserve(draw_data.draw_list_count());
 
+                self.constant.set_scale(Vector2::new(2.0 / draw_data.raw.display_size.x, 2.0 / draw_data.raw.display_size.y));
+                self.constant.set_translation(Vector2::new(-1.0 - draw_data.raw.display_pos.x * self.constant.scale().x,
+                                              -1.0 - draw_data.raw.display_pos.x * self.constant.scale().y));
+
                 for draw_list in &draw_data {
                     for draw_cmd in draw_list.cmd_buffer.iter() {
                         self.commands.push(DrawCmd {
@@ -279,10 +286,10 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
                                 w: (draw_cmd.clip_rect.z - draw_cmd.clip_rect.x) as i16,
                                 h: (draw_cmd.clip_rect.w - draw_cmd.clip_rect.y) as i16,
                             },
-                            texture_id: TextureId(draw_cmd.texture_id as u32),
+                            texture_id: unsafe { std::mem::transmute::<u32, TextureId>(draw_cmd.texture_id as u32) },
+                            //texture_id: TextureId(0),
                         });
                     }
-
                     vertices.extend(draw_list.vtx_buffer.iter().map(|v| (*v).into()).collect::<Vec<ImguiArgs>>());
                     indices.extend(draw_list.idx_buffer.iter().map(|v| (*v).into()).collect::<Vec<u16>>());
                 }
@@ -322,19 +329,22 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 
 
         for draw in &self.commands {
-            encoder.set_scissors(0, &[draw.scissor]);
-
+            println!("Drawing: {:?}", draw);
             encoder.bind_graphics_pipeline(&self.pipeline);
+
+            encoder.set_scissors(0, &[draw.scissor]);
 
             encoder.push_constants(layout, pso::ShaderStageFlags::VERTEX, 0, hal::memory::cast_slice::<f32, u32>(self.constant.raw()));
 
+            //self.vertex.bind(index, 0, (draw.vertex_range.start * ImguiArgs::vertex().stride) as u64, &mut encoder);
+            //self.index.bind(index, (draw.index_range.start * 2) as u64, &mut encoder);
+
             self.vertex.bind(index, 0, 0, &mut encoder);
-            self.index.bind(index, 0, 0, &mut encoder);
+            self.index.bind(index, 0, &mut encoder);
 
             if self.textures.loaded(draw.texture_id) {
                 self.textures.bind(layout, 0, draw.texture_id, &mut encoder);
             }
-
             encoder.draw_indexed(draw.index_range.clone(), draw.vertex_range.start as i32, std::ops::Range{ start: 0, end: 1  });
         }
 
@@ -357,7 +367,6 @@ fn build_imgui_pipeline<B: Backend>(
     subpass: hal::pass::Subpass<'_, B>,
     framebuffer_width: u32,
     framebuffer_height: u32,
-    transparent: bool,
     layouts: Vec<&B::DescriptorSetLayout>,
 ) -> Result<(B::GraphicsPipeline, B::PipelineLayout), failure::Error> {
 
@@ -376,8 +385,8 @@ fn build_imgui_pipeline<B: Backend>(
     let pipes = PipelinesBuilder::new()
         .with_pipeline(
             PipelineDescBuilder::new()
-                .with_vertex_desc(&[(ImguiArgs::vertex(), pso::VertexInputRate::Instance(1))])
-                .with_input_assembler(pso::InputAssemblerDesc::new(hal::Primitive::TriangleStrip))
+                .with_vertex_desc(&[(ImguiArgs::vertex(), pso::VertexInputRate::Vertex)])
+                .with_input_assembler(pso::InputAssemblerDesc::new(hal::Primitive::TriangleList))
                 .with_rasterizer(hal::pso::Rasterizer {
                     polygon_mode: hal::pso::PolygonMode::Fill,
                     cull_face: hal::pso::Face::NONE,
@@ -407,15 +416,11 @@ fn build_imgui_pipeline<B: Backend>(
                             })
                 .with_blend_targets(vec![pso::ColorBlendDesc(
                     pso::ColorMask::ALL,
-                    if transparent {
-                        pso::BlendState::ALPHA
-                    } else {
-                        pso::BlendState::Off
-                    },
+                    pso::BlendState::ALPHA,
                 )])
                 .with_depth_test(pso::DepthTest::On {
                     fun: pso::Comparison::Less,
-                    write: !transparent,
+                    write: false,
                 }),
         )
         .build(factory, None);
