@@ -17,7 +17,7 @@ use amethyst::{
 		Texture,
 	},
 	window::{ScreenDimensions, Window},
-	winit::Event,
+	winit::{Event, MouseCursor},
 };
 
 mod pass;
@@ -26,7 +26,6 @@ mod winit_support;
 pub use imgui;
 use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImGuiMouseCursor};
 pub use pass::DrawImguiDesc;
-use winit::MouseCursor;
 
 pub struct ImguiState {
 	pub imgui: ImGui,
@@ -39,14 +38,16 @@ pub struct ImguiState {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ImguiConfig {
 	pub font_size: f32,
-	ini: Option<String>,
-	font: Vec<u8>,
+	pub rasterizer_multiply: f32,
+	pub ini: Option<String>,
+	pub font: Vec<u8>,
 }
 impl Default for ImguiConfig {
 	fn default() -> Self {
 		Self {
 			font: include_bytes!("../mplus-1p-regular.ttf").to_vec(),
 			font_size: 13.,
+			rasterizer_multiply: 1.0,
 			ini: None,
 		}
 	}
@@ -61,13 +62,15 @@ impl ImguiState {
 
 		imgui.set_ini_filename(config.ini.as_ref().map(|i| imgui::ImString::new(i)));
 
+		winit_support::configure_keys(&mut imgui);
+
 		let _ = imgui.fonts().add_font_with_config(
 			&config.font,
 			ImFontConfig::new()
 				.oversample_h(1)
 				.pixel_snap_h(true)
 				.size_pixels(config.font_size)
-				.rasterizer_multiply(1.75),
+				.rasterizer_multiply(config.rasterizer_multiply),
 			&FontGlyphRange::japanese(),
 		);
 

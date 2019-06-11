@@ -83,8 +83,7 @@
 //! # }
 //! ```
 
-use imgui::{FrameSize, ImGui, ImGuiKey, ImGuiMouseCursor};
-use winit::{
+use amethyst::winit::{
 	ElementState,
 	Event,
 	KeyboardInput,
@@ -97,6 +96,7 @@ use winit::{
 	Window,
 	WindowEvent,
 };
+use imgui::{FrameSize, ImGui, ImGuiKey, ImGuiMouseCursor};
 
 /// Configure imgui key map with winit `VirtualKeyCode` values
 pub fn configure_keys(imgui: &mut ImGui) {
