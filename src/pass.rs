@@ -263,6 +263,9 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
             let ui = ui as *const imgui::Ui;
             let ui = unsafe { ui.read() };
 
+            self.constant.set_scale(Vector2::new(2.0 / ui.imgui().display_size().0, 2.0 / ui.imgui().display_size().1));
+            self.constant.set_translation(Vector2::new(-1.0, -1.0));
+
             let vertices = ui.render(|ui, mut draw_data| {
                 draw_data.scale_clip_rects(ui.imgui().display_framebuffer_scale());
 
@@ -270,10 +273,6 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
                 let mut indices: Vec<u16> = Vec::with_capacity(draw_data.total_idx_count());
 
                 self.commands.reserve(draw_data.draw_list_count());
-
-                self.constant.set_scale(Vector2::new(2.0 / draw_data.raw.display_size.x, 2.0 / draw_data.raw.display_size.y));
-                self.constant.set_translation(Vector2::new(-1.0 - draw_data.raw.display_pos.x * self.constant.scale().x,
-                                              -1.0 - draw_data.raw.display_pos.x * self.constant.scale().y));
 
                 for draw_list in &draw_data {
                     for draw_cmd in draw_list.cmd_buffer.iter() {
@@ -287,7 +286,6 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
                                 h: (draw_cmd.clip_rect.w - draw_cmd.clip_rect.y) as i16,
                             },
                             texture_id: unsafe { std::mem::transmute::<u32, TextureId>(draw_cmd.texture_id as u32) },
-                            //texture_id: TextureId(0),
                         });
                     }
                     vertices.extend(draw_list.vtx_buffer.iter().map(|v| (*v).into()).collect::<Vec<ImguiArgs>>());
@@ -329,15 +327,11 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 
 
         for draw in &self.commands {
-            println!("Drawing: {:?}", draw);
             encoder.bind_graphics_pipeline(&self.pipeline);
 
             encoder.set_scissors(0, &[draw.scissor]);
 
             encoder.push_constants(layout, pso::ShaderStageFlags::VERTEX, 0, hal::memory::cast_slice::<f32, u32>(self.constant.raw()));
-
-            //self.vertex.bind(index, 0, (draw.vertex_range.start * ImguiArgs::vertex().stride) as u64, &mut encoder);
-            //self.index.bind(index, (draw.index_range.start * 2) as u64, &mut encoder);
 
             self.vertex.bind(index, 0, 0, &mut encoder);
             self.index.bind(index, 0, &mut encoder);
