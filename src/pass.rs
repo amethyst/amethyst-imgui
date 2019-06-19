@@ -17,7 +17,7 @@ use amethyst::{
 			},
 			hal::{self, device::Device, pso},
 			mesh::{AsAttribute, AsVertex, Color, TexCoord, VertexFormat},
-			shader::{Shader, ShaderKind, SourceLanguage, SpirvShader, StaticShaderInfo},
+			shader::{PathBufShaderInfo, Shader, ShaderKind, SourceLanguage, SpirvShader},
 		},
 		submodules::{DynamicIndexBuffer, DynamicVertexBuffer, TextureId, TextureSub},
 		types::Backend,
@@ -26,10 +26,11 @@ use amethyst::{
 };
 use derivative::Derivative;
 use imgui::ImDrawVert;
+use std::path::PathBuf;
 
 lazy_static::lazy_static! {
-	static ref VERTEX_SRC: rendy::shader::SpirvShader = StaticShaderInfo::new(
-		concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/imgui.vert"),
+	static ref VERTEX_SRC: rendy::shader::SpirvShader = PathBufShaderInfo::new(
+		PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/imgui.vert")),
 		ShaderKind::Vertex,
 		SourceLanguage::GLSL,
 		"main",
@@ -41,8 +42,8 @@ lazy_static::lazy_static! {
 		"main",
 	);
 
-	static ref FRAGMENT_SRC: rendy::shader::SpirvShader = StaticShaderInfo::new(
-		concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/imgui.frag"),
+	static ref FRAGMENT_SRC: rendy::shader::SpirvShader = PathBufShaderInfo::new(
+		PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/imgui.frag")),
 		ShaderKind::Fragment,
 		SourceLanguage::GLSL,
 		"main",
@@ -287,26 +288,29 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		for draw in &self.commands {
 			encoder.bind_graphics_pipeline(&self.pipeline);
 
-			encoder.set_scissors(0, &[draw.scissor]);
-
-			encoder.push_constants(
-				layout,
-				pso::ShaderStageFlags::VERTEX,
-				0,
-				hal::memory::cast_slice::<f32, u32>(self.constant.raw()),
-			);
-
 			self.vertex.bind(index, 0, 0, &mut encoder);
 			self.index.bind(index, 0, &mut encoder);
 
 			if self.textures.loaded(draw.texture_id) {
 				self.textures.bind(layout, 0, draw.texture_id, &mut encoder);
 			}
-			encoder.draw_indexed(
-				draw.index_range.clone(),
-				draw.vertex_range.start as i32,
-				std::ops::Range { start: 0, end: 1 },
-			);
+
+			unsafe {
+				encoder.set_scissors(0, &[draw.scissor]);
+
+				encoder.push_constants(
+					layout,
+					pso::ShaderStageFlags::VERTEX,
+					0,
+					hal::memory::cast_slice::<f32, u32>(self.constant.raw()),
+				);
+
+				encoder.draw_indexed(
+					draw.index_range.clone(),
+					draw.vertex_range.start as i32,
+					std::ops::Range { start: 0, end: 1 },
+				);
+			}
 		}
 
 		self.commands.clear();
