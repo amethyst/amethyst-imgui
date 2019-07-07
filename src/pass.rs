@@ -1,6 +1,6 @@
 use amethyst::{
 	core::{
-		ecs::{ReadExpect, Resources, SystemData},
+		ecs::{ReadExpect, Resources, SystemData, WriteExpect},
 		math::{Vector2, Vector4},
 	},
 	renderer::{
@@ -23,6 +23,7 @@ use amethyst::{
 		types::Backend,
 		util,
 	},
+	window::ScreenDimensions,
 };
 use derivative::Derivative;
 use imgui::ImDrawVert;
@@ -138,7 +139,7 @@ impl From<ImDrawVert> for ImguiArgs {
 #[inline(always)]
 pub fn normalize(src: u32) -> [f32; 4] {
 	[
-		((src >> 0) & 0xff) as f32 / 255.0,
+		(src & 0xff) as f32 / 255.0,
 		((src >> 8) & 0xff) as f32 / 255.0,
 		((src >> 16) & 0xff) as f32 / 255.0,
 		((src >> 24) & 0xff) as f32 / 255.0,
@@ -219,7 +220,11 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		resources: &Resources,
 	) -> PrepareResult {
-		let (state,) = <(ReadExpect<'_, crate::ImguiState>,)>::fetch(resources);
+		let (time, dimensions, mut state) = <(
+			ReadExpect<'_, amethyst::core::timing::Time>,
+			ReadExpect<'_, ScreenDimensions>,
+			WriteExpect<'_, crate::ImguiState>,
+		)>::fetch(resources);
 
 		for texture in &state.textures {
 			self.textures
@@ -278,6 +283,16 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 				Ok(())
 			});
 		}
+
+		let frame = state.imgui.frame(
+			imgui::FrameSize::new(
+				f64::from(dimensions.width()),
+				f64::from(dimensions.height()),
+				dimensions.hidpi_factor(),
+			),
+			time.delta_seconds(),
+		);
+		std::mem::forget(frame);
 
 		PrepareResult::DrawRecord
 	}
