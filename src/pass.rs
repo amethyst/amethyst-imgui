@@ -1,6 +1,7 @@
 use amethyst::{
+	assets::{AssetStorage, Handle, Loader},
 	core::{
-		ecs::{Read, ReadExpect, Resources, SystemData, Write, WriteExpect},
+		ecs::{Read, ReadExpect, Resources, SystemData, Write},
 		math::{Vector2, Vector4},
 	},
 	renderer::{
@@ -15,21 +16,39 @@ use amethyst::{
 				NodeBuffer,
 				NodeImage,
 			},
-			hal::{self, device::Device, pso},
+			hal::{
+				self,
+				device::Device,
+				format::Format,
+				image::{self, Anisotropic, Filter, PackedColor, SamplerInfo, WrapMode},
+				pso,
+			},
 			mesh::{AsAttribute, AsVertex, Color, TexCoord, VertexFormat},
 			shader::{PathBufShaderInfo, Shader, ShaderKind, SourceLanguage, SpirvShader},
+			texture::TextureBuilder,
 		},
 		submodules::{DynamicIndexBuffer, DynamicVertexBuffer, TextureId, TextureSub},
-		types::Backend,
+		types::{Backend, TextureData},
 		util,
+		Texture,
 	},
 	shrev::{EventChannel, ReaderId},
 	window::{ScreenDimensions, Window},
 	winit::Event,
 };
 use derivative::Derivative;
-use imgui::{DrawCmd, DrawCmdParams};
-use std::path::PathBuf;
+use imgui::{internal::RawWrapper, DrawCmd, DrawCmdParams};
+use std::{
+	borrow::Cow,
+	path::PathBuf,
+	sync::{Arc, Mutex},
+};
+
+use imgui::{FontConfig, FontSource};
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
+
+pub struct ImguiContextWrapper(imgui::Context);
+unsafe impl Send for ImguiContextWrapper {}
 
 lazy_static::lazy_static! {
 	static ref VERTEX_SRC: SpirvShader = PathBufShaderInfo::new(
@@ -128,13 +147,23 @@ impl AsVertex for ImguiArgs {
 	fn vertex() -> VertexFormat { VertexFormat::new((TexCoord::vertex(), TexCoord::vertex(), Color::vertex())) }
 }
 
+impl From<imgui::DrawVert> for ImguiArgs {
+	fn from(other: imgui::DrawVert) -> Self {
+		Self {
+			position: other.pos.into(),
+			tex_coord: other.uv.into(),
+			color: normalize(other.col).into(),
+		}
+	}
+}
+
 #[inline(always)]
-pub fn normalize(src: u32) -> [f32; 4] {
+pub fn normalize(src: [u8; 4]) -> [f32; 4] {
 	[
-		((src >> 0) & 0xff) as f32 / 255.0,
-		((src >> 8) & 0xff) as f32 / 255.0,
-		((src >> 16) & 0xff) as f32 / 255.0,
-		((src >> 24) & 0xff) as f32 / 255.0,
+		src[0] as f32 / 255.0,
+		src[1] as f32 / 255.0,
+		src[2] as f32 / 255.0,
+		src[3] as f32 / 255.0,
 	]
 }
 
@@ -146,6 +175,37 @@ pub struct DrawImguiDesc;
 impl DrawImguiDesc {
 	/// Create instance of `DrawImgui` render group
 	pub fn new() -> Self { Default::default() }
+
+	fn generate_upload_font_textures(&self, resources: &Resources, mut fonts: imgui::FontAtlasRefMut) -> Vec<Handle<Texture>> {
+		let tex = fonts.build_rgba32_texture();
+
+		let loader = resources.fetch_mut::<Loader>();
+		let texture_storage = resources.fetch_mut::<AssetStorage<Texture>>();
+		let data = tex.data.to_vec();
+
+		let texture_builder = TextureBuilder::new()
+			.with_data_width(tex.width)
+			.with_data_height(tex.height)
+			.with_kind(image::Kind::D2(tex.width, tex.height, 1, 1))
+			.with_view_kind(image::ViewKind::D2)
+			.with_sampler_info(SamplerInfo {
+				min_filter: Filter::Linear,
+				mag_filter: Filter::Linear,
+				mip_filter: Filter::Linear,
+				wrap_mode: (WrapMode::Clamp, WrapMode::Clamp, WrapMode::Clamp),
+				lod_bias: 0.0.into(),
+				lod_range: std::ops::Range {
+					start: 0.0.into(),
+					end: 1000.0.into(),
+				},
+				comparison: None,
+				border: PackedColor(0),
+				anisotropic: Anisotropic::Off,
+			})
+			.with_raw_data(Cow::Owned(data), Format::Rgba8Unorm);
+
+		vec![loader.load_from_data(TextureData(texture_builder), (), &texture_storage)]
+	}
 }
 
 impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
@@ -161,7 +221,7 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
 		_buffers: Vec<NodeBuffer>,
 		_images: Vec<NodeImage>,
 	) -> Result<Box<dyn RenderGroup<B, Resources>>, failure::Error> {
-		let mut events = <(Write<'_, EventChannel<Event>>)>::fetch(resources);
+		let (window, mut events) = <(ReadExpect<'_, Window>, Write<'_, EventChannel<Event>>)>::fetch(resources);
 
 		let textures = TextureSub::new(factory)?;
 		let vertex = DynamicVertexBuffer::new();
@@ -170,7 +230,20 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
 		let (pipeline, pipeline_layout) =
 			build_imgui_pipeline(factory, subpass, framebuffer_width, framebuffer_height, vec![textures.raw_layout()])?;
 
-		let state = crate::ImguiState::new(resources, crate::ImguiConfig::default());
+		// Initialize everything
+		let mut context = imgui::Context::create();
+		let mut platform = WinitPlatform::init(&mut context);
+		platform.attach_window(context.io_mut(), &window, HiDpiMode::Default);
+
+		//imgui.set_ini_filename(config.ini.as_ref().map(|i| imgui::ImString::new(i)));
+		context.fonts().add_font(&[FontSource::DefaultFontData {
+			config: Some(FontConfig {
+				size_pixels: 13.,
+				..FontConfig::default()
+			}),
+		}]);
+
+		let imgui_textures = self.generate_upload_font_textures(&resources, context.fonts());
 
 		Ok(Box::new(DrawImgui::<B> {
 			pipeline,
@@ -182,7 +255,9 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
 			commands: Vec::new(),
 			batches: Default::default(),
 			event_reader_id: events.register_reader(),
-			state,
+			context: Arc::new(Mutex::new(ImguiContextWrapper(context))),
+			platform,
+			imgui_textures,
 		}))
 	}
 }
@@ -195,7 +270,8 @@ struct DrawCmdOps {
 	texture_id: TextureId,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct DrawImgui<B: Backend> {
 	pipeline: B::GraphicsPipeline,
 	pipeline_layout: B::PipelineLayout,
@@ -207,7 +283,10 @@ pub struct DrawImgui<B: Backend> {
 	constant: ImguiPushConstant,
 
 	event_reader_id: ReaderId<Event>,
-	state: crate::ImguiState,
+	#[derivative(Debug = "ignore")]
+	context: Arc<Mutex<ImguiContextWrapper>>,
+	platform: WinitPlatform,
+	imgui_textures: Vec<Handle<Texture>>,
 }
 
 impl<B: Backend> DrawImgui<B> {}
@@ -221,93 +300,83 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		resources: &Resources,
 	) -> PrepareResult {
-		let (window, events, dimensions, time, mut state) = <(
+		let (window, events, _, _, mut draw_commands) = <(
 			ReadExpect<'_, Window>,
 			Read<'_, EventChannel<Event>>,
 			ReadExpect<'_, ScreenDimensions>,
 			ReadExpect<'_, amethyst::core::timing::Time>,
+			Write<'_, crate::ImguiDrawCommandBuffer>,
 		)>::fetch(resources);
 
-		/*
-		if state.config.screen_dimensions.is_none() || *imgui_state.config.screen_dimensions.as_ref().unwrap() != *dimensions {
-			state.imgui.set_font_global_scale(dimensions.hidpi_factor() as f32);
-			imgui_state.config.screen_dimensions = Some(dimensions.clone());
-		}*/
+		let state = &mut self.context.lock().unwrap().0;
 
-		for event in events.read(self.event_reader_id.as_mut().unwrap()) {
-			state.platform.handle_event(&mut state.imgui.io_mut(), &window, &event);
+		for event in events.read(&mut self.event_reader_id) {
+			self.platform.handle_event(state.io_mut(), &window, &event);
 		}
 
-		for texture in &state.textures {
+		for texture in &self.imgui_textures {
 			self.textures
 				.insert(factory, resources, &texture, hal::image::Layout::ShaderReadOnlyOptimal);
 		}
+		self.constant
+			.set_scale(Vector2::new(2.0 / state.io().display_size[0], 2.0 / state.io().display_size[1]));
+		self.constant.set_translation(Vector2::new(-1.0, -1.0));
 
-		if let Some(ui) = unsafe { imgui::Ui::current_ui() } {
-			let ui = ui as *const imgui::Ui;
-			let ui = unsafe { ui.read() };
+		state.io_mut().update_delta_time(std::time::Instant::now());
+		{
+			let mut ui = state.frame();
 
-			self.constant
-				.set_scale(Vector2::new(2.0 / ui.imgui().display_size().0, 2.0 / ui.imgui().display_size().1));
-			self.constant.set_translation(Vector2::new(-1.0, -1.0));
+			for draw in draw_commands.iter() {
+				(draw)(&mut ui);
+			}
+			draw_commands.clear();
 
-			let _ = ui.render(|ui, mut draw_data| {
-				//draw_data.scale_clip_rects(ui.imgui().display_framebuffer_scale());
+			let draw_data = ui.render();
+			//draw_data.scale_clip_rects(ui.imgui().display_framebuffer_scale());
 
-				let mut vertices: Vec<ImguiArgs> = Vec::with_capacity(draw_data.total_vtx_count());
-				let mut indices: Vec<u16> = Vec::with_capacity(draw_data.total_idx_count());
+			let mut vertices: Vec<ImguiArgs> = Vec::with_capacity(draw_data.total_vtx_count as usize);
+			let mut indices: Vec<u16> = Vec::with_capacity(draw_data.total_idx_count as usize);
 
-				self.commands.reserve(draw_data.draw_list_count());
+			self.commands.reserve(draw_data.draw_lists().count());
 
-				for draw_list in &draw_data {
-					for draw_cmd in draw_list.cmd_buffer.iter() {
-						match draw_cmd {
-							DrawCmd::Elements {
-								count,
-								cmd_params: DrawCmdParams { clip_rect, texture_id, .. },
-							} => {
-								self.commands.push(DrawCmdOps {
-									vertex_range: std::ops::Range {
-										start: vertices.len() as u32,
-										end: (vertices.len() + draw_list.vtx_buffer.len()) as u32,
-									},
-									index_range: std::ops::Range {
-										start: indices.len() as u32,
-										end: (indices.len() + draw_list.idx_buffer.len()) as u32,
-									},
-									scissor: hal::pso::Rect {
-										x: clip_rect.x as i16,
-										y: clip_rect.y as i16,
-										w: (clip_rect.z - clip_rect.x) as i16,
-										h: (clip_rect.w - clip_rect.y) as i16,
-									},
-									texture_id: unsafe { std::mem::transmute::<u32, TextureId>(texture_id as u32) },
-								});
-							},
-							DrawCmd::ResetRenderState => (), // TODO
-							DrawCmd::RawCallback { callback, raw_cmd } => unsafe { callback(draw_list.raw(), raw_cmd) },
-						}
+			for draw_list in draw_data.draw_lists() {
+				for draw_cmd in draw_list.commands() {
+					match draw_cmd {
+						DrawCmd::Elements {
+							count: _,
+							cmd_params: DrawCmdParams { clip_rect, texture_id, .. },
+						} => {
+							self.commands.push(DrawCmdOps {
+								vertex_range: std::ops::Range {
+									start: vertices.len() as u32,
+									end: (vertices.len() + draw_list.vtx_buffer().len()) as u32,
+								},
+								index_range: std::ops::Range {
+									start: indices.len() as u32,
+									end: (indices.len() + draw_list.idx_buffer().len()) as u32,
+								},
+								scissor: hal::pso::Rect {
+									x: clip_rect[0] as i16,
+									y: clip_rect[1] as i16,
+									w: (clip_rect[2] - clip_rect[0]) as i16,
+									h: (clip_rect[3] - clip_rect[1]) as i16,
+								},
+								texture_id: unsafe { std::mem::transmute::<u32, TextureId>(texture_id.id() as u32) },
+							});
+						},
+						DrawCmd::ResetRenderState => (), // TODO
+						DrawCmd::RawCallback { callback, raw_cmd } => unsafe { callback(draw_list.raw(), raw_cmd) },
 					}
-					vertices.extend(draw_list.vtx_buffer.iter().map(|v| (*v).into()).collect::<Vec<ImguiArgs>>());
-					indices.extend(draw_list.idx_buffer.iter().map(|v| (*v).into()).collect::<Vec<u16>>());
 				}
+				vertices.extend(draw_list.vtx_buffer().iter().map(|v| (*v).into()).collect::<Vec<ImguiArgs>>());
+				indices.extend(draw_list.idx_buffer().iter().map(|v| (*v).into()).collect::<Vec<u16>>());
+			}
 
-				self.vertex.write(factory, index, vertices.len() as u64, &[vertices.iter()]);
-				self.index.write(factory, index, indices.len() as u64, &[indices.iter()]);
+			self.vertex.write(factory, index, vertices.len() as u64, &[vertices.iter()]);
+			self.index.write(factory, index, indices.len() as u64, &[indices.iter()]);
 
-				self.textures.maintain(factory, resources);
-
-				if false == true {
-					//  This is a fucking stupid type inference issue
-					return Err(failure::format_err!("WTF"));
-				}
-				Ok(())
-			});
+			self.textures.maintain(factory, resources);
 		}
-
-		state.imgui.io_mut().update_delta_time(time.delta_seconds());
-		let frame = state.imgui.frame();
-		std::mem::forget(frame);
 
 		PrepareResult::DrawRecord
 	}
