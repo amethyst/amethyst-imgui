@@ -282,6 +282,8 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 				}
 				Ok(())
 			});
+
+			crate::with(|ui| drop(ui));
 		}
 
 		let frame = state.imgui.frame(
