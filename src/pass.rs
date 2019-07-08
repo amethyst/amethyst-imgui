@@ -1,6 +1,6 @@
 use amethyst::{
 	core::{
-		ecs::{ReadExpect, Resources, SystemData, WriteExpect},
+		ecs::{Read, ReadExpect, Resources, SystemData, Write, WriteExpect},
 		math::{Vector2, Vector4},
 	},
 	renderer::{
@@ -23,10 +23,12 @@ use amethyst::{
 		types::Backend,
 		util,
 	},
-	window::ScreenDimensions,
+	shrev::{EventChannel, ReaderId},
+	window::{ScreenDimensions, Window},
+	winit::Event,
 };
 use derivative::Derivative;
-use imgui::ImDrawVert;
+use imgui::{DrawCmd, DrawCmdParams};
 use std::path::PathBuf;
 
 lazy_static::lazy_static! {
@@ -126,16 +128,6 @@ impl AsVertex for ImguiArgs {
 	fn vertex() -> VertexFormat { VertexFormat::new((TexCoord::vertex(), TexCoord::vertex(), Color::vertex())) }
 }
 
-impl From<ImDrawVert> for ImguiArgs {
-	fn from(v: ImDrawVert) -> Self {
-		ImguiArgs {
-			position: [v.pos.x, v.pos.y].into(),
-			tex_coord: [v.uv.x, v.uv.y].into(),
-			color: normalize(v.col).into(),
-		}
-	}
-}
-
 #[inline(always)]
 pub fn normalize(src: u32) -> [f32; 4] {
 	[
@@ -162,19 +154,23 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
 		_ctx: &GraphContext<B>,
 		factory: &mut Factory<B>,
 		_queue: QueueId,
-		_aux: &Resources,
+		resources: &Resources,
 		framebuffer_width: u32,
 		framebuffer_height: u32,
 		subpass: hal::pass::Subpass<'_, B>,
 		_buffers: Vec<NodeBuffer>,
 		_images: Vec<NodeImage>,
 	) -> Result<Box<dyn RenderGroup<B, Resources>>, failure::Error> {
+		let mut events = <(Write<'_, EventChannel<Event>>)>::fetch(resources);
+
 		let textures = TextureSub::new(factory)?;
 		let vertex = DynamicVertexBuffer::new();
 		let index = DynamicIndexBuffer::new();
 
 		let (pipeline, pipeline_layout) =
 			build_imgui_pipeline(factory, subpass, framebuffer_width, framebuffer_height, vec![textures.raw_layout()])?;
+
+		let state = crate::ImguiState::new(resources, crate::ImguiConfig::default());
 
 		Ok(Box::new(DrawImgui::<B> {
 			pipeline,
@@ -185,12 +181,14 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
 			constant: ImguiPushConstant::default(),
 			commands: Vec::new(),
 			batches: Default::default(),
+			event_reader_id: events.register_reader(),
+			state,
 		}))
 	}
 }
 
 #[derive(Debug)]
-struct DrawCmd {
+struct DrawCmdOps {
 	vertex_range: std::ops::Range<u32>,
 	index_range: std::ops::Range<u32>,
 	scissor: hal::pso::Rect,
@@ -205,8 +203,11 @@ pub struct DrawImgui<B: Backend> {
 	index: DynamicIndexBuffer<B, u16>,
 	batches: OrderedOneLevelBatch<TextureId, ImguiArgs>,
 	textures: TextureSub<B>,
-	commands: Vec<DrawCmd>,
+	commands: Vec<DrawCmdOps>,
 	constant: ImguiPushConstant,
+
+	event_reader_id: ReaderId<Event>,
+	state: crate::ImguiState,
 }
 
 impl<B: Backend> DrawImgui<B> {}
@@ -220,11 +221,22 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		resources: &Resources,
 	) -> PrepareResult {
-		let (dimensions, time, mut state) = <(
+		let (window, events, dimensions, time, mut state) = <(
+			ReadExpect<'_, Window>,
+			Read<'_, EventChannel<Event>>,
 			ReadExpect<'_, ScreenDimensions>,
 			ReadExpect<'_, amethyst::core::timing::Time>,
-			WriteExpect<'_, crate::ImguiState>,
 		)>::fetch(resources);
+
+		/*
+		if state.config.screen_dimensions.is_none() || *imgui_state.config.screen_dimensions.as_ref().unwrap() != *dimensions {
+			state.imgui.set_font_global_scale(dimensions.hidpi_factor() as f32);
+			imgui_state.config.screen_dimensions = Some(dimensions.clone());
+		}*/
+
+		for event in events.read(self.event_reader_id.as_mut().unwrap()) {
+			state.platform.handle_event(&mut state.imgui.io_mut(), &window, &event);
+		}
 
 		for texture in &state.textures {
 			self.textures
@@ -240,7 +252,7 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 			self.constant.set_translation(Vector2::new(-1.0, -1.0));
 
 			let _ = ui.render(|ui, mut draw_data| {
-				draw_data.scale_clip_rects(ui.imgui().display_framebuffer_scale());
+				//draw_data.scale_clip_rects(ui.imgui().display_framebuffer_scale());
 
 				let mut vertices: Vec<ImguiArgs> = Vec::with_capacity(draw_data.total_vtx_count());
 				let mut indices: Vec<u16> = Vec::with_capacity(draw_data.total_idx_count());
@@ -249,23 +261,32 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 
 				for draw_list in &draw_data {
 					for draw_cmd in draw_list.cmd_buffer.iter() {
-						self.commands.push(DrawCmd {
-							vertex_range: std::ops::Range {
-								start: vertices.len() as u32,
-								end: (vertices.len() + draw_list.vtx_buffer.len()) as u32,
+						match draw_cmd {
+							DrawCmd::Elements {
+								count,
+								cmd_params: DrawCmdParams { clip_rect, texture_id, .. },
+							} => {
+								self.commands.push(DrawCmdOps {
+									vertex_range: std::ops::Range {
+										start: vertices.len() as u32,
+										end: (vertices.len() + draw_list.vtx_buffer.len()) as u32,
+									},
+									index_range: std::ops::Range {
+										start: indices.len() as u32,
+										end: (indices.len() + draw_list.idx_buffer.len()) as u32,
+									},
+									scissor: hal::pso::Rect {
+										x: clip_rect.x as i16,
+										y: clip_rect.y as i16,
+										w: (clip_rect.z - clip_rect.x) as i16,
+										h: (clip_rect.w - clip_rect.y) as i16,
+									},
+									texture_id: unsafe { std::mem::transmute::<u32, TextureId>(texture_id as u32) },
+								});
 							},
-							index_range: std::ops::Range {
-								start: indices.len() as u32,
-								end: (indices.len() + draw_list.idx_buffer.len()) as u32,
-							},
-							scissor: hal::pso::Rect {
-								x: draw_cmd.clip_rect.x as i16,
-								y: draw_cmd.clip_rect.y as i16,
-								w: (draw_cmd.clip_rect.z - draw_cmd.clip_rect.x) as i16,
-								h: (draw_cmd.clip_rect.w - draw_cmd.clip_rect.y) as i16,
-							},
-							texture_id: unsafe { std::mem::transmute::<u32, TextureId>(draw_cmd.texture_id as u32) },
-						});
+							DrawCmd::ResetRenderState => (), // TODO
+							DrawCmd::RawCallback { callback, raw_cmd } => unsafe { callback(draw_list.raw(), raw_cmd) },
+						}
 					}
 					vertices.extend(draw_list.vtx_buffer.iter().map(|v| (*v).into()).collect::<Vec<ImguiArgs>>());
 					indices.extend(draw_list.idx_buffer.iter().map(|v| (*v).into()).collect::<Vec<u16>>());
@@ -282,18 +303,10 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 				}
 				Ok(())
 			});
-
-			crate::with(|ui| drop(ui));
 		}
 
-		let frame = state.imgui.frame(
-			imgui::FrameSize::new(
-				f64::from(dimensions.width()),
-				f64::from(dimensions.height()),
-				dimensions.hidpi_factor(),
-			),
-			time.delta_seconds(),
-		);
+		state.imgui.io_mut().update_delta_time(time.delta_seconds());
+		let frame = state.imgui.frame();
 		std::mem::forget(frame);
 
 		PrepareResult::DrawRecord
