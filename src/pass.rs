@@ -1,6 +1,6 @@
 use amethyst::{
 	core::{
-		ecs::{ReadExpect, Resources, SystemData},
+		ecs::{ReadExpect, Resources, SystemData, WriteExpect},
 		math::{Vector2, Vector4},
 	},
 	renderer::{
@@ -23,13 +23,14 @@ use amethyst::{
 		types::Backend,
 		util,
 	},
+	window::ScreenDimensions,
 };
 use derivative::Derivative;
 use imgui::ImDrawVert;
 use std::path::PathBuf;
 
 lazy_static::lazy_static! {
-	static ref VERTEX_SRC: rendy::shader::SpirvShader = PathBufShaderInfo::new(
+	static ref VERTEX_SRC: SpirvShader = PathBufShaderInfo::new(
 		PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/imgui.vert")),
 		ShaderKind::Vertex,
 		SourceLanguage::GLSL,
@@ -42,7 +43,7 @@ lazy_static::lazy_static! {
 		"main",
 	);
 
-	static ref FRAGMENT_SRC: rendy::shader::SpirvShader = PathBufShaderInfo::new(
+	static ref FRAGMENT_SRC: SpirvShader = PathBufShaderInfo::new(
 		PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/imgui.frag")),
 		ShaderKind::Fragment,
 		SourceLanguage::GLSL,
@@ -219,7 +220,11 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		resources: &Resources,
 	) -> PrepareResult {
-		let (state,) = <(ReadExpect<'_, crate::ImguiState>,)>::fetch(resources);
+		let (dimensions, time, mut state) = <(
+			ReadExpect<'_, ScreenDimensions>,
+			ReadExpect<'_, amethyst::core::timing::Time>,
+			WriteExpect<'_, crate::ImguiState>,
+		)>::fetch(resources);
 
 		for texture in &state.textures {
 			self.textures
@@ -278,6 +283,16 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 				Ok(())
 			});
 		}
+
+		let frame = state.imgui.frame(
+			imgui::FrameSize::new(
+				f64::from(dimensions.width()),
+				f64::from(dimensions.height()),
+				dimensions.hidpi_factor(),
+			),
+			time.delta_seconds(),
+		);
+		std::mem::forget(frame);
 
 		PrepareResult::DrawRecord
 	}
