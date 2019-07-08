@@ -245,6 +245,8 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
 
 		let imgui_textures = self.generate_upload_font_textures(&resources, context.fonts());
 
+		unsafe { crate::CURRENT_UI = Some(std::mem::transmute(context.frame())) }
+
 		Ok(Box::new(DrawImgui::<B> {
 			pipeline,
 			pipeline_layout,
@@ -300,19 +302,14 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		resources: &Resources,
 	) -> PrepareResult {
-		let (window, events, _, _, mut draw_commands) = <(
+		let (window, events, _, _) = <(
 			ReadExpect<'_, Window>,
 			Read<'_, EventChannel<Event>>,
 			ReadExpect<'_, ScreenDimensions>,
 			ReadExpect<'_, amethyst::core::timing::Time>,
-			Write<'_, crate::ImguiDrawCommandBuffer>,
 		)>::fetch(resources);
 
 		let state = &mut self.context.lock().unwrap().0;
-
-		for event in events.read(&mut self.event_reader_id) {
-			self.platform.handle_event(state.io_mut(), &window, &event);
-		}
 
 		for texture in &self.imgui_textures {
 			self.textures
@@ -324,15 +321,12 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 
 		state.io_mut().update_delta_time(std::time::Instant::now());
 		{
-			let mut ui = state.frame();
-
-			for draw in draw_commands.iter() {
-				(draw)(&mut ui);
-			}
-			draw_commands.clear();
-
-			let draw_data = ui.render();
-			//draw_data.scale_clip_rects(ui.imgui().display_framebuffer_scale());
+			let draw_data = unsafe {
+				drop(crate::current_ui().unwrap());
+				crate::CURRENT_UI = None;
+				imgui::sys::igRender();
+				&*(imgui::sys::igGetDrawData() as *mut imgui::DrawData)
+			};
 
 			let mut vertices: Vec<ImguiArgs> = Vec::with_capacity(draw_data.total_vtx_count as usize);
 			let mut indices: Vec<u16> = Vec::with_capacity(draw_data.total_idx_count as usize);
@@ -376,6 +370,14 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 			self.index.write(factory, index, indices.len() as u64, &[indices.iter()]);
 
 			self.textures.maintain(factory, resources);
+		}
+
+		for event in events.read(&mut self.event_reader_id) {
+			self.platform.handle_event(state.io_mut(), &window, &event);
+		}
+
+		unsafe {
+			crate::CURRENT_UI = Some(std::mem::transmute(state.frame()));
 		}
 
 		PrepareResult::DrawRecord

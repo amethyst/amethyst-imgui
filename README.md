@@ -1,33 +1,13 @@
 [![Crates.io](https://img.shields.io/crates/v/amethyst-imgui.svg)](https://crates.io/crates/amethyst-imgui/)
 
-# Usage:
-1. Add this to your Stage:
-```rust
-.with_pass(amethyst_imgui::DrawUi::default())
-```
-2. Add this to `GameDataBuilder`:
-```rust
-GameDataBuilder::default()
-	.with(amethyst_imgui::BeginFrame::default(), "imgui_begin", &[])
-	.with_barrier()
-	// --- everything else ---
-	.with_barrier()
-	.with(amethyst_imgui::EndFrame::default(), "imgui_end", &["imgui_begin"]);
-```
-3. Use it in any `System`:
+# Usage has changed in 0.3.0.
+
+1. include the 0.11 render pass, `DrawImguiDesc`, with the appropriate config.
+2. Render windows using the `amethyst_imgui::with` function.
 ```rust
 amethyst_imgui::with(|ui| {
 	ui.show_demo_window(&mut true);
 });
 ```
 
-# It's annoying that my window/widget state is reset:
-Add an `ImguiIni` resource.
-```rust
-world.add_resource(amethyst_imgui::ImguiIni::new("imgui.ini"));
-```
-
-# Example:
-```
-cargo run --example demo_window
-```
+No systems or other shinanigans are required now. All imgui state management occurs within the imgui render pass.

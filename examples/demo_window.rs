@@ -19,17 +19,16 @@ use amethyst::{
     window::{ScreenDimensions, Window, WindowBundle},
 };
 
-use amethyst_imgui::{DrawImguiDesc, ImguiDrawCommandBuffer};
+use amethyst_imgui::DrawImguiDesc;
 
 #[derive(Default, Clone, Copy)]
 pub struct ImguiUseSystem;
 impl<'s> amethyst::ecs::System<'s> for ImguiUseSystem {
-    type SystemData = Write<'s, ImguiDrawCommandBuffer>;
-
-    fn run(&mut self, mut ui: Self::SystemData) {
-        ui.draw(|ui| {
+    type SystemData = ();
+    fn run(&mut self, _: Self::SystemData) {
+        amethyst_imgui::with(|ui| {
             ui.show_demo_window(&mut true);
-        })
+        });
     }
 }
 
