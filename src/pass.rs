@@ -302,7 +302,7 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		resources: &Resources,
 	) -> PrepareResult {
-		let (window, events, _, _) = <(
+		let (window, events, dimensions, _) = <(
 			ReadExpect<'_, Window>,
 			Read<'_, EventChannel<Event>>,
 			ReadExpect<'_, ScreenDimensions>,
@@ -320,6 +320,14 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		self.constant.set_translation(Vector2::new(-1.0, -1.0));
 
 		state.io_mut().update_delta_time(std::time::Instant::now());
+		//		state.io_mut().font_global_scale = (1.0 / dimensions.hidpi_factor()) as f32;
+		//		state.io_mut().display_size = [dimensions.width(), dimensions.height()];
+		unsafe {
+			if let Some(ui) = crate::current_ui() {
+				self.platform.prepare_render(ui, &window);
+			}
+		}
+
 		{
 			let draw_data = unsafe {
 				drop(crate::current_ui().unwrap());
@@ -350,10 +358,10 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 									end: (indices.len() + draw_list.idx_buffer().len()) as u32,
 								},
 								scissor: hal::pso::Rect {
-									x: clip_rect[0] as i16,
-									y: clip_rect[1] as i16,
-									w: (clip_rect[2] - clip_rect[0]) as i16,
-									h: (clip_rect[3] - clip_rect[1]) as i16,
+									x: ((clip_rect[0] - draw_data.display_pos[0]) * draw_data.framebuffer_scale[0]) as i16,
+									y: ((clip_rect[1] - draw_data.display_pos[1]) * draw_data.framebuffer_scale[1]) as i16,
+									w: ((clip_rect[2] - clip_rect[0] - draw_data.display_pos[0]) * draw_data.framebuffer_scale[0]) as i16,
+									h: ((clip_rect[3] - clip_rect[1] - draw_data.display_pos[1]) * draw_data.framebuffer_scale[1]) as i16,
 								},
 								texture_id: unsafe { std::mem::transmute::<u32, TextureId>(texture_id.id() as u32) },
 							});
