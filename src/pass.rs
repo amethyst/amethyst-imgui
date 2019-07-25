@@ -33,7 +33,7 @@ use amethyst::{
 		Texture,
 	},
 	shrev::{EventChannel, ReaderId},
-	window::{ScreenDimensions, Window},
+	window::Window,
 	winit::Event,
 };
 use derivative::Derivative;
@@ -160,10 +160,10 @@ impl From<imgui::DrawVert> for ImguiArgs {
 #[inline(always)]
 pub fn normalize(src: [u8; 4]) -> [f32; 4] {
 	[
-		src[0] as f32 / 255.0,
-		src[1] as f32 / 255.0,
-		src[2] as f32 / 255.0,
-		src[3] as f32 / 255.0,
+		f32::from(src[0]) / 255.0,
+		f32::from(src[1]) / 255.0,
+		f32::from(src[2]) / 255.0,
+		f32::from(src[3]) / 255.0,
 	]
 }
 
@@ -294,6 +294,7 @@ pub struct DrawImgui<B: Backend> {
 impl<B: Backend> DrawImgui<B> {}
 
 impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
+	#[allow(clippy::identity_conversion)]
 	fn prepare(
 		&mut self,
 		factory: &Factory<B>,
@@ -302,12 +303,7 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		resources: &Resources,
 	) -> PrepareResult {
-		let (window, events, dimensions, _) = <(
-			ReadExpect<'_, Window>,
-			Read<'_, EventChannel<Event>>,
-			ReadExpect<'_, ScreenDimensions>,
-			ReadExpect<'_, amethyst::core::timing::Time>,
-		)>::fetch(resources);
+		let (window, events) = <(ReadExpect<'_, Window>, Read<'_, EventChannel<Event>>)>::fetch(resources);
 
 		let state = &mut self.context.lock().unwrap().0;
 
@@ -330,7 +326,6 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 
 		{
 			let draw_data = unsafe {
-				drop(crate::current_ui().unwrap());
 				crate::CURRENT_UI = None;
 				imgui::sys::igRender();
 				&*(imgui::sys::igGetDrawData() as *mut imgui::DrawData)
@@ -345,8 +340,8 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 				for draw_cmd in draw_list.commands() {
 					match draw_cmd {
 						DrawCmd::Elements {
-							count: _,
 							cmd_params: DrawCmdParams { clip_rect, texture_id, .. },
+							..
 						} => {
 							self.commands.push(DrawCmdOps {
 								vertex_range: std::ops::Range {

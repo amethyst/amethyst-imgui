@@ -9,7 +9,8 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-amethyst = { version = "0.11", features = ["vulkan", "shader-compiler"] }
+#amethyst = { version = "0.11", features = ["vulkan", "shader-compiler"] }
+amethyst = { path = "../amethyst", features = ["nightly", "saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }
 shred-derive = "0.6"
 shred = "0.8"
 lazy_static = "1.3"
