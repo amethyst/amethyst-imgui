@@ -1,3 +1,0 @@
-[submodule "imgui-rs"]
-	path = imgui-rs
-	url = https://github.com/awpteamoose/imgui-rs.git
