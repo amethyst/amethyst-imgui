@@ -1,7 +1,7 @@
 use amethyst::{
 	assets::{AssetStorage, Handle, Loader},
 	core::{
-		ecs::{Read, ReadExpect, Resources, SystemData, Write},
+		ecs::{Read, ReadExpect, SystemData, World, Write},
 		math::{Vector2, Vector4},
 	},
 	renderer::{
@@ -176,11 +176,11 @@ impl DrawImguiDesc {
 	/// Create instance of `DrawImgui` render group
 	pub fn new() -> Self { Default::default() }
 
-	fn generate_upload_font_textures(&self, resources: &Resources, mut fonts: imgui::FontAtlasRefMut) -> Vec<Handle<Texture>> {
+	fn generate_upload_font_textures(&self, world: &World, mut fonts: imgui::FontAtlasRefMut) -> Vec<Handle<Texture>> {
 		let tex = fonts.build_rgba32_texture();
 
-		let loader = resources.fetch_mut::<Loader>();
-		let texture_storage = resources.fetch_mut::<AssetStorage<Texture>>();
+		let loader = world.fetch_mut::<Loader>();
+		let texture_storage = world.fetch_mut::<AssetStorage<Texture>>();
 		let data = tex.data.to_vec();
 
 		let texture_builder = TextureBuilder::new()
@@ -208,20 +208,20 @@ impl DrawImguiDesc {
 	}
 }
 
-impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
+impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 	fn build(
 		self,
 		_ctx: &GraphContext<B>,
 		factory: &mut Factory<B>,
 		_queue: QueueId,
-		resources: &Resources,
+		world: &World,
 		framebuffer_width: u32,
 		framebuffer_height: u32,
 		subpass: hal::pass::Subpass<'_, B>,
 		_buffers: Vec<NodeBuffer>,
 		_images: Vec<NodeImage>,
-	) -> Result<Box<dyn RenderGroup<B, Resources>>, failure::Error> {
-		let (window, mut events) = <(ReadExpect<'_, Window>, Write<'_, EventChannel<Event>>)>::fetch(resources);
+	) -> Result<Box<dyn RenderGroup<B, World>>, failure::Error> {
+		let (window, mut events) = <(ReadExpect<'_, Window>, Write<'_, EventChannel<Event>>)>::fetch(world);
 
 		let textures = TextureSub::new(factory)?;
 		let vertex = DynamicVertexBuffer::new();
@@ -243,7 +243,7 @@ impl<B: Backend> RenderGroupDesc<B, Resources> for DrawImguiDesc {
 			}),
 		}]);
 
-		let imgui_textures = self.generate_upload_font_textures(&resources, context.fonts());
+		let imgui_textures = self.generate_upload_font_textures(&world, context.fonts());
 
 		unsafe { crate::CURRENT_UI = Some(std::mem::transmute(context.frame())) }
 
@@ -293,7 +293,7 @@ pub struct DrawImgui<B: Backend> {
 
 impl<B: Backend> DrawImgui<B> {}
 
-impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
+impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 	#[allow(clippy::identity_conversion)]
 	fn prepare(
 		&mut self,
@@ -301,15 +301,15 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		_queue: QueueId,
 		index: usize,
 		_subpass: hal::pass::Subpass<'_, B>,
-		resources: &Resources,
+		world: &World,
 	) -> PrepareResult {
-		let (window, events) = <(ReadExpect<'_, Window>, Read<'_, EventChannel<Event>>)>::fetch(resources);
+		let (window, events) = <(ReadExpect<'_, Window>, Read<'_, EventChannel<Event>>)>::fetch(world);
 
 		let state = &mut self.context.lock().unwrap().0;
 
 		for texture in &self.imgui_textures {
 			self.textures
-				.insert(factory, resources, &texture, hal::image::Layout::ShaderReadOnlyOptimal);
+				.insert(factory, world, &texture, hal::image::Layout::ShaderReadOnlyOptimal);
 		}
 		self.constant
 			.set_scale(Vector2::new(2.0 / state.io().display_size[0], 2.0 / state.io().display_size[1]));
@@ -372,7 +372,7 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 			self.vertex.write(factory, index, vertices.len() as u64, &[vertices.iter()]);
 			self.index.write(factory, index, indices.len() as u64, &[indices.iter()]);
 
-			self.textures.maintain(factory, resources);
+			self.textures.maintain(factory, world);
 		}
 
 		for event in events.read(&mut self.event_reader_id) {
@@ -386,7 +386,7 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		PrepareResult::DrawRecord
 	}
 
-	fn draw_inline(&mut self, mut encoder: RenderPassEncoder<'_, B>, index: usize, _: hal::pass::Subpass<'_, B>, _: &Resources) {
+	fn draw_inline(&mut self, mut encoder: RenderPassEncoder<'_, B>, index: usize, _: hal::pass::Subpass<'_, B>, _: &World) {
 		let layout = &self.pipeline_layout;
 
 		for draw in &self.commands {
@@ -420,7 +420,7 @@ impl<B: Backend> RenderGroup<B, Resources> for DrawImgui<B> {
 		self.commands.clear();
 	}
 
-	fn dispose(self: Box<Self>, factory: &mut Factory<B>, _aux: &Resources) {
+	fn dispose(self: Box<Self>, factory: &mut Factory<B>, _aux: &World) {
 		unsafe {
 			factory.device().destroy_graphics_pipeline(self.pipeline);
 			factory.device().destroy_pipeline_layout(self.pipeline_layout);

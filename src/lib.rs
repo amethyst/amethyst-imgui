@@ -7,7 +7,7 @@ pub use imgui;
 pub use pass::DrawImguiDesc;
 
 use amethyst::{
-	ecs::{DispatcherBuilder, Resources},
+	ecs::{DispatcherBuilder, World},
 	error::Error,
 	renderer::{
 		bundle::{RenderOrder, RenderPlan, RenderPlugin, Target},
@@ -46,9 +46,9 @@ impl RenderImgui {
 }
 
 impl<B: Backend> RenderPlugin<B> for RenderImgui {
-	fn on_build<'a, 'b>(&mut self, _: &mut DispatcherBuilder<'a, 'b>) -> Result<(), Error> { Ok(()) }
+	fn on_build<'a, 'b>(&mut self, _: &mut World, _: &mut DispatcherBuilder<'a, 'b>) -> Result<(), Error> { Ok(()) }
 
-	fn on_plan(&mut self, plan: &mut RenderPlan<B>, _factory: &mut Factory<B>, _res: &Resources) -> Result<(), Error> {
+	fn on_plan(&mut self, plan: &mut RenderPlan<B>, _factory: &mut Factory<B>, _: &World) -> Result<(), Error> {
 		plan.extend_target(self.target, |ctx| {
 			ctx.add(RenderOrder::Overlay, DrawImguiDesc::new().builder())?;
 			Ok(())
