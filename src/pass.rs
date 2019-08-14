@@ -77,6 +77,8 @@ lazy_static::lazy_static! {
 		"main",
 	);
 
+	static ref TIME: std::sync::Mutex<std::time::Instant> = std::sync::Mutex::new(std::time::Instant::now());
+
 //static ref SHADERS: ShaderSetBuilder = ShaderSetBuilder::default()
 //		.with_vertex(&*VERTEX).unwrap()
 //		.with_fragment(&*FRAGMENT).unwrap();
@@ -315,7 +317,8 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 			.set_scale(Vector2::new(2.0 / state.io().display_size[0], 2.0 / state.io().display_size[1]));
 		self.constant.set_translation(Vector2::new(-1.0, -1.0));
 
-		state.io_mut().update_delta_time(std::time::Instant::now());
+		let last_frame = &mut TIME.lock().unwrap() as &mut std::time::Instant;
+		std::mem::replace(last_frame, state.io_mut().update_delta_time(*last_frame));
 		//		state.io_mut().font_global_scale = (1.0 / dimensions.hidpi_factor()) as f32;
 		//		state.io_mut().display_size = [dimensions.width(), dimensions.height()];
 		unsafe {
