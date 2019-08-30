@@ -474,10 +474,7 @@ fn build_imgui_pipeline<B: Backend>(
 					..Default::default()
 				})
 				.with_blend_targets(vec![pso::ColorBlendDesc(pso::ColorMask::ALL, pso::BlendState::ALPHA)])
-				.with_depth_test(pso::DepthTest::On {
-					fun: pso::Comparison::Less,
-					write: false,
-				}),
+				.with_depth_test(pso::DepthTest::Off),
 		)
 		.build(factory, None);
 
