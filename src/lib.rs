@@ -1,4 +1,3 @@
-#![feature(custom_attribute)]
 #![allow(clippy::type_complexity, dead_code)]
 
 mod pass;
