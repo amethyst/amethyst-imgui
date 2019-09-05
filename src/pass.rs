@@ -1,7 +1,7 @@
 use amethyst::{
 	assets::{AssetStorage, Handle, Loader},
 	core::{
-		ecs::{Read, ReadExpect, SystemData, World, Write},
+		ecs::{Read, ReadExpect, SystemData, World, Write, WriteExpect},
 		math::{Vector2, Vector4},
 	},
 	renderer::{
@@ -32,9 +32,7 @@ use amethyst::{
 		util,
 		Texture,
 	},
-	shrev::{EventChannel, ReaderId},
 	window::Window,
-	winit::Event,
 };
 use derivative::Derivative;
 use imgui::{internal::RawWrapper, DrawCmd, DrawCmdParams};
@@ -46,9 +44,7 @@ use std::{
 
 use imgui::{FontConfig, FontSource};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-
-pub struct ImguiContextWrapper(imgui::Context);
-unsafe impl Send for ImguiContextWrapper {}
+use crate::ImguiContextWrapper;
 
 lazy_static::lazy_static! {
 	static ref VERTEX_SRC: SpirvShader = PathBufShaderInfo::new(
@@ -221,7 +217,9 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 		_buffers: Vec<NodeBuffer>,
 		_images: Vec<NodeImage>,
 	) -> Result<Box<dyn RenderGroup<B, World>>, failure::Error> {
-		let (window, mut events) = <(ReadExpect<'_, Window>, Write<'_, EventChannel<Event>>)>::fetch(world);
+		let (window, platform, context_mutex) = <(ReadExpect<'_, Window>, WriteExpect<'_, WinitPlatform>, ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,)>::fetch(world);
+
+		let context = &mut context_mutex.lock().unwrap().0;
 
 		let textures = TextureSub::new(factory)?;
 		let vertex = DynamicVertexBuffer::new();
@@ -229,11 +227,6 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 
 		let (pipeline, pipeline_layout) =
 			build_imgui_pipeline(factory, subpass, framebuffer_width, framebuffer_height, vec![textures.raw_layout()])?;
-
-		// Initialize everything
-		let mut context = imgui::Context::create();
-		let mut platform = WinitPlatform::init(&mut context);
-		platform.attach_window(context.io_mut(), &window, HiDpiMode::Default);
 
 		//imgui.set_ini_filename(config.ini.as_ref().map(|i| imgui::ImString::new(i)));
 		context.fonts().add_font(&[FontSource::DefaultFontData {
@@ -256,9 +249,6 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 			constant: ImguiPushConstant::default(),
 			commands: Vec::new(),
 			batches: Default::default(),
-			event_reader_id: events.register_reader(),
-			context: Arc::new(Mutex::new(ImguiContextWrapper(context))),
-			platform,
 			imgui_textures,
 		}))
 	}
@@ -283,11 +273,6 @@ pub struct DrawImgui<B: Backend> {
 	textures: TextureSub<B>,
 	commands: Vec<DrawCmdOps>,
 	constant: ImguiPushConstant,
-
-	event_reader_id: ReaderId<Event>,
-	#[derivative(Debug = "ignore")]
-	context: Arc<Mutex<ImguiContextWrapper>>,
-	platform: WinitPlatform,
 	imgui_textures: Vec<Handle<Texture>>,
 }
 
@@ -303,9 +288,9 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		world: &World,
 	) -> PrepareResult {
-		let (window, events) = <(ReadExpect<'_, Window>, Read<'_, EventChannel<Event>>)>::fetch(world);
+		let (window, platform, context) = <(ReadExpect<'_, Window>, WriteExpect<'_, WinitPlatform>, ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,)>::fetch(world);
 
-		let state = &mut self.context.lock().unwrap().0;
+		let state = &mut context.lock().unwrap().0;
 
 		for texture in &self.imgui_textures {
 			self.textures
@@ -320,7 +305,7 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 		//		state.io_mut().display_size = [dimensions.width(), dimensions.height()];
 		unsafe {
 			if let Some(ui) = crate::current_ui() {
-				self.platform.prepare_render(ui, &window);
+				platform.prepare_render(ui, &window);
 			}
 		}
 
@@ -373,10 +358,6 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 			self.index.write(factory, index, indices.len() as u64, &[indices.iter()]);
 
 			self.textures.maintain(factory, world);
-		}
-
-		for event in events.read(&mut self.event_reader_id) {
-			self.platform.handle_event(state.io_mut(), &window, &event);
 		}
 
 		unsafe {

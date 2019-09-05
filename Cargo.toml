@@ -14,8 +14,8 @@ metal = ["amethyst/metal"]
 empty = ["amethyst/empty"]
 
 [dependencies]
-amethyst = { version = "0.12", features = ["shader-compiler"] }
-#amethyst = { path = "../amethyst", features = ["nightly", "saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }
+#amethyst = { version = "0.12", features = ["shader-compiler"] }
+amethyst = { path = "../amethyst", features = ["nightly", "saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }
 lazy_static = "1.3"
 derivative = "1.0"
 failure = "0.1"
