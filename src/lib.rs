@@ -84,6 +84,9 @@ impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiI
 
 		// Setup Imgui
 		let mut context = imgui::Context::create();
+
+		context.io_mut().config_flags |= imgui::ConfigFlags::ENABLE_DOCKING;
+
 		let mut platform = WinitPlatform::init(&mut context);
 		platform.attach_window(context.io_mut(), &world.fetch::<Window>(), HiDpiMode::Default);
 
