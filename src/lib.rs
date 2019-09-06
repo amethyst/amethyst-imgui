@@ -6,14 +6,96 @@ pub use imgui;
 pub use pass::DrawImguiDesc;
 
 use amethyst::{
-	ecs::{DispatcherBuilder, World},
+	core::SystemDesc,
+	derive::SystemDesc,
+	ecs::{DispatcherBuilder, Read, ReadExpect, System, SystemData, World, Write, WriteExpect},
 	error::Error,
+	input::{BindingTypes, InputEvent},
 	renderer::{
 		bundle::{RenderOrder, RenderPlan, RenderPlugin, Target},
 		rendy::{factory::Factory, graph::render::RenderGroupDesc},
 		types::Backend,
 	},
+	shrev::{EventChannel, ReaderId},
+	window::Window,
+	winit::Event,
 };
+use derivative::Derivative;
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use std::sync::{Arc, Mutex};
+
+pub struct ImguiContextWrapper(pub imgui::Context);
+unsafe impl Send for ImguiContextWrapper {}
+
+pub struct FilteredInputEvent<T: BindingTypes>(pub InputEvent<T>);
+
+pub struct ImguiInputSystem<T: BindingTypes> {
+	input_reader: ReaderId<InputEvent<T>>,
+	winit_reader: ReaderId<Event>,
+}
+impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
+	type SystemData = (
+		ReadExpect<'s, Arc<Mutex<ImguiContextWrapper>>>,
+		WriteExpect<'s, WinitPlatform>,
+		Read<'s, EventChannel<InputEvent<T>>>,
+		Read<'s, EventChannel<Event>>,
+		Write<'s, EventChannel<FilteredInputEvent<T>>>,
+		ReadExpect<'s, Window>,
+	);
+
+	fn run(&mut self, (context, mut platform, input_events, winit_events, mut filtered_events, window): Self::SystemData) {
+		let state = &mut context.lock().unwrap().0;
+
+		for event in winit_events.read(&mut self.winit_reader) {
+			platform.handle_event(state.io_mut(), &window, &event);
+		}
+		for input in input_events.read(&mut self.input_reader) {
+			match input {
+				InputEvent::MouseMoved { .. } |
+				InputEvent::MouseButtonPressed(_) |
+				InputEvent::MouseButtonReleased(_) |
+				InputEvent::MouseWheelMoved(_) => {
+					if !state.io().want_capture_mouse {
+						filtered_events.single_write(FilteredInputEvent(input.clone()));
+					}
+				},
+				InputEvent::KeyPressed { .. } | InputEvent::KeyReleased { .. } => {
+					if !state.io().want_capture_keyboard {
+						filtered_events.single_write(FilteredInputEvent(input.clone()));
+					}
+				},
+				_ => filtered_events.single_write(FilteredInputEvent(input.clone())),
+			}
+		}
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct ImguiInputSystemDesc<T: BindingTypes> {
+	_marker: std::marker::PhantomData<T>,
+}
+impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiInputSystemDesc<T> {
+	fn build(self, world: &mut World) -> ImguiInputSystem<T> {
+		<ImguiInputSystem<T> as System<'_>>::SystemData::setup(world);
+
+		let input_reader = Write::<EventChannel<InputEvent<T>>>::fetch(world).register_reader();
+		let winit_reader = Write::<EventChannel<Event>>::fetch(world).register_reader();
+
+		// Setup Imgui
+		let mut context = imgui::Context::create();
+		let mut platform = WinitPlatform::init(&mut context);
+		platform.attach_window(context.io_mut(), &world.fetch::<Window>(), HiDpiMode::Default);
+
+		world.insert(Arc::new(Mutex::new(ImguiContextWrapper(context))));
+		world.insert(platform);
+
+		ImguiInputSystem {
+			input_reader,
+			winit_reader,
+		}
+	}
+}
 
 /// Ui is actually Ui<'a>
 /// This implies 'static
@@ -31,12 +113,14 @@ pub fn with(f: impl FnOnce(&imgui::Ui)) {
 pub unsafe fn current_ui<'a>() -> Option<&'a imgui::Ui<'a>> { CURRENT_UI.as_ref() }
 
 /// A [RenderPlugin] for rendering Imgui elements.
-#[derive(Debug, Default)]
-pub struct RenderImgui {
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Default(bound = ""))]
+pub struct RenderImgui<T: BindingTypes> {
 	target: Target,
+	_marker: std::marker::PhantomData<T>,
 }
 
-impl RenderImgui {
+impl<T: BindingTypes> RenderImgui<T> {
 	/// Select render target on which UI should be rendered.
 	pub fn with_target(mut self, target: Target) -> Self {
 		self.target = target;
@@ -44,8 +128,16 @@ impl RenderImgui {
 	}
 }
 
-impl<B: Backend> RenderPlugin<B> for RenderImgui {
-	fn on_build<'a, 'b>(&mut self, _: &mut World, _: &mut DispatcherBuilder<'a, 'b>) -> Result<(), Error> { Ok(()) }
+impl<B: Backend, T: BindingTypes> RenderPlugin<B> for RenderImgui<T> {
+	fn on_build<'a, 'b>(&mut self, world: &mut World, dispatcher: &mut DispatcherBuilder<'a, 'b>) -> Result<(), Error> {
+		dispatcher.add(
+			ImguiInputSystemDesc::<T>::default().build(world),
+			"imgui_input_system",
+			&["input_system", "window"],
+		);
+
+		Ok(())
+	}
 
 	fn on_plan(&mut self, plan: &mut RenderPlan<B>, _factory: &mut Factory<B>, _: &World) -> Result<(), Error> {
 		plan.extend_target(self.target, |ctx| {
