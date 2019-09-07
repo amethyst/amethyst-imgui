@@ -47,7 +47,7 @@ impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
 		let state = &mut context.lock().unwrap().0;
 
 		for event in winit_events.read(&mut self.winit_reader) {
-			platform.handle_event(state.io_mut(), &window, &event);
+			//platform.handle_event(state.io_mut(), &window, &event);
 		}
 		for input in input_events.read(&mut self.input_reader) {
 			match input {

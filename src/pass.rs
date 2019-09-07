@@ -32,7 +32,9 @@ use amethyst::{
 		util,
 		Texture,
 	},
+	shrev::{EventChannel, ReaderId},
 	window::Window,
+	winit::Event,
 };
 use derivative::Derivative;
 use imgui::{internal::RawWrapper, DrawCmd, DrawCmdParams};
@@ -42,9 +44,9 @@ use std::{
 	sync::{Arc, Mutex},
 };
 
+use crate::ImguiContextWrapper;
 use imgui::{FontConfig, FontSource};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use crate::ImguiContextWrapper;
 
 lazy_static::lazy_static! {
 	static ref VERTEX_SRC: SpirvShader = PathBufShaderInfo::new(
@@ -219,7 +221,12 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 		_buffers: Vec<NodeBuffer>,
 		_images: Vec<NodeImage>,
 	) -> Result<Box<dyn RenderGroup<B, World>>, failure::Error> {
-		let (window, platform, context_mutex) = <(ReadExpect<'_, Window>, WriteExpect<'_, WinitPlatform>, ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,)>::fetch(world);
+		let (window, platform, context_mutex, mut winit_events) = <(
+			ReadExpect<'_, Window>,
+			WriteExpect<'_, WinitPlatform>,
+			ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,
+			Write<'_, EventChannel<Event>>,
+		)>::fetch(world);
 
 		let context = &mut context_mutex.lock().unwrap().0;
 
@@ -252,6 +259,7 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 			commands: Vec::new(),
 			batches: Default::default(),
 			imgui_textures,
+			reader_id: winit_events.register_reader(),
 		}))
 	}
 }
@@ -276,6 +284,7 @@ pub struct DrawImgui<B: Backend> {
 	commands: Vec<DrawCmdOps>,
 	constant: ImguiPushConstant,
 	imgui_textures: Vec<Handle<Texture>>,
+	reader_id: ReaderId<Event>,
 }
 
 impl<B: Backend> DrawImgui<B> {}
@@ -290,7 +299,12 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 		_subpass: hal::pass::Subpass<'_, B>,
 		world: &World,
 	) -> PrepareResult {
-		let (window, platform, context) = <(ReadExpect<'_, Window>, WriteExpect<'_, WinitPlatform>, ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,)>::fetch(world);
+		let (window, mut platform, context, winit_events) = <(
+			ReadExpect<'_, Window>,
+			WriteExpect<'_, WinitPlatform>,
+			ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,
+			Read<'_, EventChannel<Event>>,
+		)>::fetch(world);
 
 		let state = &mut context.lock().unwrap().0;
 
@@ -363,6 +377,11 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 			self.textures.maintain(factory, world);
 		}
 
+		for event in winit_events.read(&mut self.reader_id) {
+			platform.handle_event(state.io_mut(), &window, &event);
+		}
+
+		platform.prepare_frame(state.io_mut(), &window);
 		unsafe {
 			crate::CURRENT_UI = Some(std::mem::transmute(state.frame()));
 		}
