@@ -70,11 +70,19 @@ impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
 	}
 }
 
-#[derive(Derivative)]
-#[derivative(Default(bound = ""))]
 pub struct ImguiInputSystemDesc<T: BindingTypes> {
 	_marker: std::marker::PhantomData<T>,
+	config_flags: imgui::ConfigFlags,
 }
+impl<T: BindingTypes> ImguiInputSystemDesc<T> {
+	pub fn new(config_flags: imgui::ConfigFlags) -> Self {
+		Self {
+			_marker: Default::default(),
+			config_flags,
+		}
+	}
+}
+
 impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiInputSystemDesc<T> {
 	fn build(self, world: &mut World) -> ImguiInputSystem<T> {
 		<ImguiInputSystem<T> as System<'_>>::SystemData::setup(world);
@@ -85,7 +93,7 @@ impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiI
 		// Setup Imgui
 		let mut context = imgui::Context::create();
 
-		context.io_mut().config_flags |= imgui::ConfigFlags::ENABLE_DOCKING;
+		context.io_mut().config_flags |= self.config_flags;
 
 		let mut platform = WinitPlatform::init(&mut context);
 		platform.attach_window(context.io_mut(), &world.fetch::<Window>(), HiDpiMode::Default);
@@ -117,13 +125,28 @@ pub unsafe fn current_ui<'a>() -> Option<&'a imgui::Ui<'a>> { CURRENT_UI.as_ref(
 
 /// A [RenderPlugin] for rendering Imgui elements.
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), Default(bound = ""))]
+#[derivative(Debug(bound = ""))]
 pub struct RenderImgui<T: BindingTypes> {
 	target: Target,
+	config_flags: imgui::ConfigFlags,
 	_marker: std::marker::PhantomData<T>,
+}
+impl<T: BindingTypes> Default for RenderImgui<T> {
+	fn default() -> Self {
+		Self {
+			target: Default::default(),
+			_marker: Default::default(),
+			config_flags: imgui::ConfigFlags::ENABLE_DOCKING,
+		}
+	}
 }
 
 impl<T: BindingTypes> RenderImgui<T> {
+	pub fn with_imgui_config(mut self, config_flags: imgui::ConfigFlags) -> Self {
+		self.config_flags = config_flags;
+		self
+	}
+
 	/// Select render target on which UI should be rendered.
 	pub fn with_target(mut self, target: Target) -> Self {
 		self.target = target;
@@ -134,7 +157,7 @@ impl<T: BindingTypes> RenderImgui<T> {
 impl<B: Backend, T: BindingTypes> RenderPlugin<B> for RenderImgui<T> {
 	fn on_build<'a, 'b>(&mut self, world: &mut World, dispatcher: &mut DispatcherBuilder<'a, 'b>) -> Result<(), Error> {
 		dispatcher.add(
-			ImguiInputSystemDesc::<T>::default().build(world),
+			ImguiInputSystemDesc::<T>::new(self.config_flags).build(world),
 			"imgui_input_system",
 			&["input_system", "window"],
 		);
