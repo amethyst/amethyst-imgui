@@ -45,7 +45,6 @@ use std::{
 };
 
 use crate::ImguiContextWrapper;
-use imgui::{FontConfig, FontSource};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 
 lazy_static::lazy_static! {
@@ -238,12 +237,6 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 			build_imgui_pipeline(factory, subpass, framebuffer_width, framebuffer_height, vec![textures.raw_layout()])?;
 
 		//imgui.set_ini_filename(config.ini.as_ref().map(|i| imgui::ImString::new(i)));
-		context.fonts().add_font(&[FontSource::DefaultFontData {
-			config: Some(FontConfig {
-				size_pixels: 13.,
-				..FontConfig::default()
-			}),
-		}]);
 
 		let imgui_textures = self.generate_upload_font_textures(&world, context.fonts());
 
@@ -425,6 +418,12 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 
 	fn dispose(self: Box<Self>, factory: &mut Factory<B>, _aux: &World) {
 		unsafe {
+			let draw_data = unsafe {
+				crate::CURRENT_UI = None;
+				imgui::sys::igRender();
+				&*(imgui::sys::igGetDrawData() as *mut imgui::DrawData)
+			};
+
 			factory.device().destroy_graphics_pipeline(self.pipeline);
 			factory.device().destroy_pipeline_layout(self.pipeline_layout);
 		}

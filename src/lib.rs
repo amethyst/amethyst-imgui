@@ -93,6 +93,13 @@ impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiI
 		// Setup Imgui
 		let mut context = imgui::Context::create();
 
+		context.fonts().add_font(&[imgui::FontSource::DefaultFontData {
+			config: Some(imgui::FontConfig {
+				size_pixels: 13.,
+				..imgui::FontConfig::default()
+			}),
+		}]);
+
 		context.io_mut().config_flags |= self.config_flags;
 
 		let mut platform = WinitPlatform::init(&mut context);
