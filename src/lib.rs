@@ -136,11 +136,21 @@ pub struct RenderImgui<T: BindingTypes> {
 	_marker: std::marker::PhantomData<T>,
 }
 impl<T: BindingTypes> Default for RenderImgui<T> {
+	#[cfg(feature = "docking")]
 	fn default() -> Self {
 		Self {
 			target: Default::default(),
 			_marker: Default::default(),
 			config_flags: imgui::ConfigFlags::ENABLE_DOCKING,
+		}
+	}
+
+	#[cfg(not(feature = "docking"))]
+	fn default() -> Self {
+		Self {
+			target: Default::default(),
+			_marker: Default::default(),
+			config_flags: imgui::ConfigFlags::empty(),
 		}
 	}
 }
