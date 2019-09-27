@@ -45,7 +45,7 @@ use std::{
 };
 
 use crate::ImguiContextWrapper;
-use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use imgui_winit_support::{WinitPlatform};
 
 lazy_static::lazy_static! {
 	static ref VERTEX_SRC: SpirvShader = PathBufShaderInfo::new(
@@ -220,9 +220,7 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 		_buffers: Vec<NodeBuffer>,
 		_images: Vec<NodeImage>,
 	) -> Result<Box<dyn RenderGroup<B, World>>, failure::Error> {
-		let (window, platform, context_mutex, mut winit_events) = <(
-			ReadExpect<'_, Window>,
-			WriteExpect<'_, WinitPlatform>,
+		let (context_mutex, mut winit_events) = <(
 			ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,
 			Write<'_, EventChannel<Event>>,
 		)>::fetch(world);
@@ -374,7 +372,7 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 			platform.handle_event(state.io_mut(), &window, &event);
 		}
 
-		platform.prepare_frame(state.io_mut(), &window);
+		platform.prepare_frame(state.io_mut(), &window).unwrap();
 		unsafe {
 			crate::CURRENT_UI = Some(std::mem::transmute(state.frame()));
 		}
@@ -418,11 +416,9 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 
 	fn dispose(self: Box<Self>, factory: &mut Factory<B>, _aux: &World) {
 		unsafe {
-			let draw_data = unsafe {
-				crate::CURRENT_UI = None;
-				imgui::sys::igRender();
-				&*(imgui::sys::igGetDrawData() as *mut imgui::DrawData)
-			};
+			crate::CURRENT_UI = None;
+			imgui::sys::igRender();
+			&*(imgui::sys::igGetDrawData() as *mut imgui::DrawData);
 
 			factory.device().destroy_graphics_pipeline(self.pipeline);
 			factory.device().destroy_pipeline_layout(self.pipeline_layout);

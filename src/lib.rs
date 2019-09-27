@@ -7,8 +7,7 @@ pub use pass::DrawImguiDesc;
 
 use amethyst::{
 	core::SystemDesc,
-	derive::SystemDesc,
-	ecs::{DispatcherBuilder, Read, ReadExpect, System, SystemData, World, Write, WriteExpect},
+	ecs::{DispatcherBuilder, Read, ReadExpect, System, SystemData, World, Write},
 	error::Error,
 	input::{BindingTypes, InputEvent},
 	renderer::{
@@ -36,17 +35,15 @@ pub struct ImguiInputSystem<T: BindingTypes> {
 impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
 	type SystemData = (
 		ReadExpect<'s, Arc<Mutex<ImguiContextWrapper>>>,
-		WriteExpect<'s, WinitPlatform>,
 		Read<'s, EventChannel<InputEvent<T>>>,
 		Read<'s, EventChannel<Event>>,
 		Write<'s, EventChannel<FilteredInputEvent<T>>>,
-		ReadExpect<'s, Window>,
 	);
 
-	fn run(&mut self, (context, mut platform, input_events, winit_events, mut filtered_events, window): Self::SystemData) {
+	fn run(&mut self, (context, input_events, winit_events, mut filtered_events): Self::SystemData) {
 		let state = &mut context.lock().unwrap().0;
 
-		for event in winit_events.read(&mut self.winit_reader) {
+		for _ in winit_events.read(&mut self.winit_reader) {
 			//platform.handle_event(state.io_mut(), &window, &event);
 		}
 		for input in input_events.read(&mut self.input_reader) {
