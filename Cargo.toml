@@ -9,9 +9,7 @@ readme = "README.md"
 edition = "2018"
 
 [features]
-vulkan = ["amethyst/vulkan"]
-metal = ["amethyst/metal"]
-empty = ["amethyst/empty"]
+default = ["amethyst/vulkan"]
 docking = []
 
 [dependencies]
@@ -31,4 +29,3 @@ failure = "0.1"
 [[example]]
 name = "demo_window"
 path = "examples/demo_window.rs"
-

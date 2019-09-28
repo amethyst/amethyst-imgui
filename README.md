@@ -13,6 +13,9 @@ This crate proivdes an amethyst `RenderPlugin` (available since amethyst 0.12) w
 
 A minimal example is available at [examples/demo_window.rs](examples/demo_window.rs)
 
+```
+cargo run --example demo_window --features amethyst/vulkan
+```
 
 ## Usage 
 
@@ -22,7 +25,7 @@ This create uses the amethyst `shader-compiler`, which relies on `shaderc` to co
 
 Example Cargo.toml Usage:
 ```toml
-amethyst-imgui = { path = "../amethyst-imgui", features = ["vulkan"] }
+amethyst-imgui = "0.5"
 ```
 
 
@@ -36,13 +39,14 @@ fn main() -> amethyst::Result<()> {
     let game_data = GameDataBuilder::default()
         .with_barrier()
         .with(DemoSystem::default(), "imgui_use", &[])
+        .with_bundle(amethyst::input::InputBundle::<amethyst::input::StringBindings>::default())?
         .with_bundle(
             RenderingBundle::<DefaultBackend>::new()
                 .with_plugin(
                     RenderToWindow::from_config_path(display_config_path)
                         .with_clear([0.34, 0.36, 0.52, 1.0]),
                 )
-                .with_plugin(RenderImgui::default()),
+                .with_plugin(RenderImgui::<amethyst::input::StringBindings>::default()),
         )?;
 
     Application::build("/", Example)?.build(game_data)?.run();
@@ -64,4 +68,3 @@ impl<'s> amethyst::ecs::System<'s> for ImguiDemoSystem {
     }
 }
 ```
-
