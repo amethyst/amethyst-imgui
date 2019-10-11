@@ -7,7 +7,11 @@ use amethyst::{
 	renderer::{bundle::RenderingBundle, types::DefaultBackend, RenderToWindow},
 	utils::application_root_dir,
 };
-use amethyst_imgui::{imgui, imgui::im_str, RenderImgui};
+use amethyst_imgui::{
+	imgui,
+	imgui::{im_str, ImString},
+	RenderImgui,
+};
 use std::sync::{Arc, Mutex};
 
 const DISTANCE: f32 = 10.0;

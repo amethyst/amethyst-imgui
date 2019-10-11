@@ -112,8 +112,6 @@ impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiI
 	}
 }
 
-/// Ui is actually Ui<'a>
-/// This implies 'static
 static mut CURRENT_UI: Option<imgui::Ui<'static>> = None;
 
 pub fn with(f: impl FnOnce(&imgui::Ui)) {
@@ -124,7 +122,6 @@ pub fn with(f: impl FnOnce(&imgui::Ui)) {
 	}
 }
 
-// what lifeimtes go here? how do I use transmute here?
 pub unsafe fn current_ui<'a>() -> Option<&'a imgui::Ui<'a>> { CURRENT_UI.as_ref() }
 
 /// A [RenderPlugin] for rendering Imgui elements.

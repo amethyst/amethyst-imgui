@@ -1,6 +1,6 @@
 [package]
 name = "amethyst-imgui"
-version = "0.5.1"
+version = "0.5.2"
 description = "imgui library for amethyst"
 license = "CC0-1.0"
 authors = ["Awpteamoose <cargo@awpteamoose.my.to>", "Walter Pearce <jaynus@gmail.com>"]
@@ -10,22 +10,32 @@ edition = "2018"
 
 [features]
 default = ["amethyst/vulkan"]
+shader-compiler = ["amethyst/shader-compiler"]
 docking = []
 
 [dependencies]
 imgui = { version = "0.2" }
 imgui-winit-support = { version = "0.2" }
-amethyst = { version = "0.13", features = ["shader-compiler"] }
-#amethyst = { path = "../amethyst", features = ["nightly", "saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }
+amethyst = { version = "0.13" }
 
-# For docking support
-#imgui = { git = "https://github.com/jaynus/imgui-rs", branch"="docking" }
-#imgui-winit-support = { git = "https://github.com/jaynus/imgui-rs", branch"="docking" }
+# Development dependencies
+#amethyst = { path = "../amethyst", features = ["saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }
+#imgui = { path = "../imgui-rs" }
+#imgui-winit-support = { path = "../imgui-rs/imgui-winit-support" }
+
+# Docking dependencies
+#imgui = { git = "https://github.com/jaynus/imgui-rs.git" }
+#imgui-winit-support = { git = "https://github.com/jaynus/imgui-rs.git" }
 
 lazy_static = "1.3"
 derivative = "1.0"
 failure = "0.1"
+bumpalo = "2.6"
 
 [[example]]
 name = "demo_window"
 path = "examples/demo_window.rs"
+
+[[example]]
+name = "demo_overlay"
+path = "examples/demo_overlay.rs"

@@ -24,7 +24,7 @@ use amethyst::{
 				pso,
 			},
 			mesh::{AsAttribute, AsVertex, Color, TexCoord, VertexFormat},
-			shader::{PathBufShaderInfo, Shader, ShaderKind, SourceLanguage, SpirvShader},
+			shader::{Shader, SpirvShader},
 			texture::TextureBuilder,
 		},
 		submodules::{DynamicIndexBuffer, DynamicVertexBuffer, TextureId, TextureSub},
@@ -36,17 +36,25 @@ use amethyst::{
 	window::Window,
 	winit::Event,
 };
+use bumpalo::{collections::Vec as BumpVec, Bump};
+
 use derivative::Derivative;
 use imgui::{internal::RawWrapper, DrawCmd, DrawCmdParams};
 use std::{
 	borrow::Cow,
-	path::PathBuf,
 	sync::{Arc, Mutex},
 };
 
 use crate::ImguiContextWrapper;
-use imgui_winit_support::{WinitPlatform};
+use imgui_winit_support::WinitPlatform;
 
+#[cfg(feature = "shader-compiler")]
+use amethyst::renderer::rendy::shader::{PathBufShaderInfo, ShaderKind, SourceLanguage};
+
+#[cfg(feature = "shader-compiler")]
+use std::path::PathBuf;
+
+#[cfg(feature = "shader-compiler")]
 lazy_static::lazy_static! {
 	static ref VERTEX_SRC: SpirvShader = PathBufShaderInfo::new(
 		PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/imgui.vert")),
@@ -73,12 +81,25 @@ lazy_static::lazy_static! {
 		(*FRAGMENT_SRC).stage(),
 		"main",
 	);
+}
 
+#[cfg(not(feature = "shader-compiler"))]
+lazy_static::lazy_static! {
+	static ref VERTEX: SpirvShader = SpirvShader::new(
+		include_bytes!("../compiled/imgui.vert.spv").to_vec(),
+		pso::ShaderStageFlags::VERTEX,
+		"main",
+	);
+
+	static ref FRAGMENT: SpirvShader = SpirvShader::new(
+		include_bytes!("../compiled/imgui.frag.spv").to_vec(),
+		pso::ShaderStageFlags::FRAGMENT,
+		"main",
+	);
+}
+
+lazy_static::lazy_static! {
 	static ref TIME: std::sync::Mutex<std::time::Instant> = std::sync::Mutex::new(std::time::Instant::now());
-
-//static ref SHADERS: ShaderSetBuilder = ShaderSetBuilder::default()
-//		.with_vertex(&*VERTEX).unwrap()
-//		.with_fragment(&*FRAGMENT).unwrap();
 }
 
 #[repr(transparent)]
@@ -220,10 +241,8 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 		_buffers: Vec<NodeBuffer>,
 		_images: Vec<NodeImage>,
 	) -> Result<Box<dyn RenderGroup<B, World>>, failure::Error> {
-		let (context_mutex, mut winit_events) = <(
-			ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,
-			Write<'_, EventChannel<Event>>,
-		)>::fetch(world);
+		let (context_mutex, mut winit_events) =
+			<(ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>, Write<'_, EventChannel<Event>>)>::fetch(world);
 
 		let context = &mut context_mutex.lock().unwrap().0;
 
@@ -251,6 +270,7 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 			batches: Default::default(),
 			imgui_textures,
 			reader_id: winit_events.register_reader(),
+			bump: Mutex::new(Bump::default()),
 		}))
 	}
 }
@@ -276,6 +296,7 @@ pub struct DrawImgui<B: Backend> {
 	constant: ImguiPushConstant,
 	imgui_textures: Vec<Handle<Texture>>,
 	reader_id: ReaderId<Event>,
+	bump: Mutex<Bump>,
 }
 
 impl<B: Backend> DrawImgui<B> {}
@@ -296,6 +317,9 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 			ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,
 			Read<'_, EventChannel<Event>>,
 		)>::fetch(world);
+
+		let mut bump = self.bump.lock().unwrap();
+		bump.reset();
 
 		let state = &mut context.lock().unwrap().0;
 
@@ -324,8 +348,8 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 				&*(imgui::sys::igGetDrawData() as *mut imgui::DrawData)
 			};
 
-			let mut vertices: Vec<ImguiArgs> = Vec::with_capacity(draw_data.total_vtx_count as usize);
-			let mut indices: Vec<u16> = Vec::with_capacity(draw_data.total_idx_count as usize);
+			let mut vertices: BumpVec<ImguiArgs> = BumpVec::with_capacity_in(draw_data.total_vtx_count as usize, &bump);
+			let mut indices: BumpVec<u16> = BumpVec::with_capacity_in(draw_data.total_idx_count as usize, &bump);
 
 			self.commands.reserve(draw_data.draw_lists().count());
 
