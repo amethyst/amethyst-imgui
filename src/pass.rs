@@ -1,11 +1,12 @@
 use amethyst::{
 	assets::{AssetStorage, Handle, Loader},
 	core::{
-		ecs::{Read, ReadExpect, SystemData, World, Write, WriteExpect},
+		legion::*,
 		math::{Vector2, Vector4},
 	},
 	renderer::{
 		batch::OrderedOneLevelBatch,
+		legion::submodules::{DynamicIndexBuffer, DynamicVertexBuffer, TextureId, TextureSub},
 		pipeline::{PipelineDescBuilder, PipelinesBuilder},
 		rendy::{
 			command::{QueueId, RenderPassEncoder},
@@ -27,7 +28,6 @@ use amethyst::{
 			shader::{Shader, SpirvShader},
 			texture::TextureBuilder,
 		},
-		submodules::{DynamicIndexBuffer, DynamicVertexBuffer, TextureId, TextureSub},
 		types::{Backend, TextureData},
 		util,
 		Texture,
@@ -199,8 +199,8 @@ impl DrawImguiDesc {
 	fn generate_upload_font_textures(&self, world: &World, mut fonts: imgui::FontAtlasRefMut) -> Vec<Handle<Texture>> {
 		let tex = fonts.build_rgba32_texture();
 
-		let loader = world.fetch_mut::<Loader>();
-		let texture_storage = world.fetch_mut::<AssetStorage<Texture>>();
+		let loader = world.resources.get_mut::<Loader>().unwrap();
+		let texture_storage = world.resources.get_mut::<AssetStorage<Texture>>().unwrap();
 		let data = tex.data.to_vec();
 
 		let texture_builder = TextureBuilder::new()
@@ -242,7 +242,7 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 		_images: Vec<NodeImage>,
 	) -> Result<Box<dyn RenderGroup<B, World>>, failure::Error> {
 		let (context_mutex, mut winit_events) =
-			<(ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>, Write<'_, EventChannel<Event>>)>::fetch(world);
+			<(Read<Arc<Mutex<ImguiContextWrapper>>>, Write<EventChannel<Event>>)>::fetch(&world.resources);
 
 		let context = &mut context_mutex.lock().unwrap().0;
 
@@ -312,11 +312,11 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 		world: &World,
 	) -> PrepareResult {
 		let (window, mut platform, context, winit_events) = <(
-			ReadExpect<'_, Window>,
-			WriteExpect<'_, WinitPlatform>,
-			ReadExpect<'_, Arc<Mutex<ImguiContextWrapper>>>,
-			Read<'_, EventChannel<Event>>,
-		)>::fetch(world);
+			Read<Window>,
+			Write<WinitPlatform>,
+			Read<Arc<Mutex<ImguiContextWrapper>>>,
+			Read<EventChannel<Event>>,
+		)>::fetch(&world.resources);
 
 		let mut bump = self.bump.lock().unwrap();
 		bump.reset();

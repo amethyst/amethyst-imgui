@@ -6,12 +6,11 @@ pub use imgui;
 pub use pass::DrawImguiDesc;
 
 use amethyst::{
-	core::SystemDesc,
-	ecs::{DispatcherBuilder, Read, ReadExpect, System, SystemData, World, Write},
+	core::{ecs as specs, legion::*, SystemDesc},
 	error::Error,
 	input::{BindingTypes, InputEvent},
 	renderer::{
-		bundle::{RenderOrder, RenderPlan, RenderPlugin, Target},
+		legion::bundle::{RenderOrder, RenderPlan, RenderPlugin, Target},
 		rendy::{factory::Factory, graph::render::RenderGroupDesc},
 		types::Backend,
 	},
@@ -28,88 +27,58 @@ unsafe impl Send for ImguiContextWrapper {}
 
 pub struct FilteredInputEvent<T: BindingTypes>(pub InputEvent<T>);
 
-pub struct ImguiInputSystem<T: BindingTypes> {
-	input_reader: ReaderId<InputEvent<T>>,
-	winit_reader: ReaderId<Event>,
-}
-impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
-	type SystemData = (
-		ReadExpect<'s, Arc<Mutex<ImguiContextWrapper>>>,
-		Read<'s, EventChannel<InputEvent<T>>>,
-		Read<'s, EventChannel<Event>>,
-		Write<'s, EventChannel<FilteredInputEvent<T>>>,
-	);
+fn build_imgui_input_system<T: BindingTypes>(world: &mut World, config_flags: imgui::ConfigFlags) -> Box<dyn Schedulable> {
+	let mut context = imgui::Context::create();
 
-	fn run(&mut self, (context, input_events, winit_events, mut filtered_events): Self::SystemData) {
-		let state = &mut context.lock().unwrap().0;
+	context.fonts().add_font(&[imgui::FontSource::DefaultFontData {
+		config: Some(imgui::FontConfig {
+			size_pixels: 13.,
+			..imgui::FontConfig::default()
+		}),
+	}]);
 
-		for _ in winit_events.read(&mut self.winit_reader) {
-			//platform.handle_event(state.io_mut(), &window, &event);
-		}
-		for input in input_events.read(&mut self.input_reader) {
-			match input {
-				InputEvent::MouseMoved { .. } |
-				InputEvent::MouseButtonPressed(_) |
-				InputEvent::MouseButtonReleased(_) |
-				InputEvent::MouseWheelMoved(_) => {
-					if !state.io().want_capture_mouse {
-						filtered_events.single_write(FilteredInputEvent(input.clone()));
-					}
-				},
-				InputEvent::KeyPressed { .. } | InputEvent::KeyReleased { .. } => {
-					if !state.io().want_capture_keyboard {
-						filtered_events.single_write(FilteredInputEvent(input.clone()));
-					}
-				},
-				_ => filtered_events.single_write(FilteredInputEvent(input.clone())),
+	context.io_mut().config_flags |= config_flags;
+
+	let mut platform = WinitPlatform::init(&mut context);
+	platform.attach_window(context.io_mut(), &world.resources.get_mut::<Window>().unwrap(), HiDpiMode::Default);
+
+	world.resources.insert(Arc::new(Mutex::new(ImguiContextWrapper(context))));
+	world.resources.insert(platform);
+	world.resources.insert(EventChannel::<FilteredInputEvent<T>>::default());
+
+	let mut input_reader = world.resources.get_mut::<EventChannel<InputEvent<T>>>().unwrap().register_reader();
+	let mut winit_reader = world.resources.get_mut::<EventChannel<Event>>().unwrap().register_reader();
+
+	SystemBuilder::<()>::new("ImguiInputSystem")
+		.read_resource::<Arc<Mutex<ImguiContextWrapper>>>()
+		.read_resource::<EventChannel<InputEvent<T>>>()
+		.read_resource::<EventChannel<Event>>()
+		.write_resource::<EventChannel<FilteredInputEvent<T>>>()
+		.build(move |_, _, (context, input_events, winit_events, filtered_events), _| {
+			let state = &mut context.lock().unwrap().0;
+
+			for _ in winit_events.read(&mut winit_reader) {
+				//platform.handle_event(state.io_mut(), &window, &event);
 			}
-		}
-	}
-}
-
-pub struct ImguiInputSystemDesc<T: BindingTypes> {
-	_marker: std::marker::PhantomData<T>,
-	config_flags: imgui::ConfigFlags,
-}
-impl<T: BindingTypes> ImguiInputSystemDesc<T> {
-	pub fn new(config_flags: imgui::ConfigFlags) -> Self {
-		Self {
-			_marker: Default::default(),
-			config_flags,
-		}
-	}
-}
-
-impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiInputSystemDesc<T> {
-	fn build(self, world: &mut World) -> ImguiInputSystem<T> {
-		<ImguiInputSystem<T> as System<'_>>::SystemData::setup(world);
-
-		let input_reader = Write::<EventChannel<InputEvent<T>>>::fetch(world).register_reader();
-		let winit_reader = Write::<EventChannel<Event>>::fetch(world).register_reader();
-
-		// Setup Imgui
-		let mut context = imgui::Context::create();
-
-		context.fonts().add_font(&[imgui::FontSource::DefaultFontData {
-			config: Some(imgui::FontConfig {
-				size_pixels: 13.,
-				..imgui::FontConfig::default()
-			}),
-		}]);
-
-		context.io_mut().config_flags |= self.config_flags;
-
-		let mut platform = WinitPlatform::init(&mut context);
-		platform.attach_window(context.io_mut(), &world.fetch::<Window>(), HiDpiMode::Default);
-
-		world.insert(Arc::new(Mutex::new(ImguiContextWrapper(context))));
-		world.insert(platform);
-
-		ImguiInputSystem {
-			input_reader,
-			winit_reader,
-		}
-	}
+			for input in input_events.read(&mut input_reader) {
+				match input {
+					InputEvent::MouseMoved { .. } |
+					InputEvent::MouseButtonPressed(_) |
+					InputEvent::MouseButtonReleased(_) |
+					InputEvent::MouseWheelMoved(_) => {
+						if !state.io().want_capture_mouse {
+							filtered_events.single_write(FilteredInputEvent(input.clone()));
+						}
+					},
+					InputEvent::KeyPressed { .. } | InputEvent::KeyReleased { .. } => {
+						if !state.io().want_capture_keyboard {
+							filtered_events.single_write(FilteredInputEvent(input.clone()));
+						}
+					},
+					_ => filtered_events.single_write(FilteredInputEvent(input.clone())),
+				}
+			}
+		})
 }
 
 static mut CURRENT_UI: Option<imgui::Ui<'static>> = None;
@@ -166,12 +135,9 @@ impl<T: BindingTypes> RenderImgui<T> {
 }
 
 impl<B: Backend, T: BindingTypes> RenderPlugin<B> for RenderImgui<T> {
-	fn on_build<'a, 'b>(&mut self, world: &mut World, dispatcher: &mut DispatcherBuilder<'a, 'b>) -> Result<(), Error> {
-		dispatcher.add(
-			ImguiInputSystemDesc::<T>::new(self.config_flags).build(world),
-			"imgui_input_system",
-			&["input_system", "window"],
-		);
+	fn on_build<'a, 'b>(&mut self, world: &mut World, dispatcher: &mut DispatcherBuilder) -> Result<(), Error> {
+		let config_flags = self.config_flags;
+		dispatcher.add_system(Stage::Begin, move |world| build_imgui_input_system::<T>(world, config_flags));
 
 		Ok(())
 	}
