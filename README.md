@@ -9,7 +9,7 @@ ImGUI is known industry wide for its utility in fast prototyping and debug inter
 
 ## Integration
 
-This crate proivdes an amethyst `RenderPlugin` (available since amethyst 0.12) which properly renders ImGUI windows which are rendered using the `imgui-rs` crate. This integration is accomplished by calling the `amethyst_imgui::with` function anywhere within an Amethyst (a `System` or `State` is appropriate), which will render within the immediate-mode context of ImGui. All synchronization, frame handling and Amethyst input is handled within this crate.
+This crate provides an amethyst `RenderPlugin` (available since amethyst 0.12) which properly renders ImGUI windows which are rendered using the `imgui-rs` crate. This integration is accomplished by calling the `amethyst_imgui::with` function anywhere within an Amethyst (a `System` or `State` is appropriate), which will render within the immediate-mode context of ImGui. All synchronization, frame handling and Amethyst input is handled within this crate.
 
 A minimal example is available at [examples/demo_window.rs](examples/demo_window.rs)
 
