@@ -14,14 +14,14 @@ shader-compiler = ["amethyst/shader-compiler"]
 docking = []
 
 [dependencies]
-imgui = { version = "0.2" }
-imgui-winit-support = { version = "0.2" }
-amethyst = { version = "0.13" }
+#imgui = { version = "0.2" }
+#imgui-winit-support = { version = "0.2" }
+#amethyst = { version = "0.13" }
 
 # Development dependencies
-#amethyst = { path = "../amethyst", features = ["saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }
-#imgui = { path = "../imgui-rs" }
-#imgui-winit-support = { path = "../imgui-rs/imgui-winit-support" }
+amethyst = { path = "../amethyst", features = ["saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }
+imgui = { path = "../imgui-rs" }
+imgui-winit-support = { path = "../imgui-rs/imgui-winit-support" }
 
 # Docking dependencies
 #imgui = { git = "https://github.com/jaynus/imgui-rs.git" }

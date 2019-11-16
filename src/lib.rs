@@ -6,13 +6,14 @@ pub use imgui;
 pub use pass::DrawImguiDesc;
 
 use amethyst::{
+	assets::Handle,
 	core::{ecs as specs, legion::*, SystemDesc},
 	error::Error,
 	input::{BindingTypes, InputEvent},
 	renderer::{
 		legion::bundle::{RenderOrder, RenderPlan, RenderPlugin, Target},
 		rendy::{factory::Factory, graph::render::RenderGroupDesc},
-		types::Backend,
+		types::Backend, Texture,
 	},
 	shrev::{EventChannel, ReaderId},
 	window::Window,
@@ -22,7 +23,7 @@ use derivative::Derivative;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::sync::{Arc, Mutex};
 
-pub struct ImguiContextWrapper(pub imgui::Context);
+pub struct ImguiContextWrapper(pub imgui::Context, Vec<Handle<Texture>>);
 unsafe impl Send for ImguiContextWrapper {}
 
 pub struct FilteredInputEvent<T: BindingTypes>(pub InputEvent<T>);
@@ -42,7 +43,7 @@ fn build_imgui_input_system<T: BindingTypes>(world: &mut World, config_flags: im
 	let mut platform = WinitPlatform::init(&mut context);
 	platform.attach_window(context.io_mut(), &world.resources.get_mut::<Window>().unwrap(), HiDpiMode::Default);
 
-	world.resources.insert(Arc::new(Mutex::new(ImguiContextWrapper(context))));
+	world.resources.insert(Arc::new(Mutex::new(ImguiContextWrapper(context, Vec::default()))));
 	world.resources.insert(platform);
 	world.resources.insert(EventChannel::<FilteredInputEvent<T>>::default());
 
@@ -107,7 +108,7 @@ impl<T: BindingTypes> Default for RenderImgui<T> {
 		Self {
 			target: Default::default(),
 			_marker: Default::default(),
-			config_flags: imgui::ConfigFlags::ENABLE_DOCKING,
+			config_flags: imgui::ConfigFlags::empty(),
 		}
 	}
 

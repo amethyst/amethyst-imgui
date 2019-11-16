@@ -1,7 +1,7 @@
 use amethyst::{
 	assets::{AssetStorage, Handle, Loader},
 	core::{
-		legion::*,
+		legion::{*, query::Read},
 		math::{Vector2, Vector4},
 	},
 	renderer::{
@@ -196,7 +196,7 @@ impl DrawImguiDesc {
 	/// Create instance of `DrawImgui` render group
 	pub fn new() -> Self { Default::default() }
 
-	fn generate_upload_font_textures(&self, world: &World, mut fonts: imgui::FontAtlasRefMut) -> Vec<Handle<Texture>> {
+	fn generate_upload_font_textures(&self, world: &World, mut fonts: imgui::FontAtlasRefMut) -> Handle<Texture> {
 		let tex = fonts.build_rgba32_texture();
 
 		let loader = world.resources.get_mut::<Loader>().unwrap();
@@ -224,7 +224,7 @@ impl DrawImguiDesc {
 			})
 			.with_raw_data(Cow::Owned(data), Format::Rgba8Unorm);
 
-		vec![loader.load_from_data(TextureData(texture_builder), (), &texture_storage)]
+		loader.load_from_data(TextureData(texture_builder), (), &texture_storage)
 	}
 }
 
@@ -255,7 +255,8 @@ impl<B: Backend> RenderGroupDesc<B, World> for DrawImguiDesc {
 
 		//imgui.set_ini_filename(config.ini.as_ref().map(|i| imgui::ImString::new(i)));
 
-		let imgui_textures = self.generate_upload_font_textures(&world, context.fonts());
+		let font = self.generate_upload_font_textures(&world, context.fonts());
+		context.1.push(font);
 
 		unsafe { crate::CURRENT_UI = Some(std::mem::transmute(context.frame())) }
 
@@ -323,7 +324,7 @@ impl<B: Backend> RenderGroup<B, World> for DrawImgui<B> {
 
 		let state = &mut context.lock().unwrap().0;
 
-		for texture in &self.imgui_textures {
+		for texture in &state.1 {
 			self.textures
 				.insert(factory, world, &texture, hal::image::Layout::ShaderReadOnlyOptimal);
 		}
