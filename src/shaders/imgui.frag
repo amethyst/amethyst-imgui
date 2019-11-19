@@ -6,5 +6,5 @@ layout (location = 0) out vec4 outColor;
 
 void main()
 {
-	outColor = pow(inColor * texture(fontSampler, inUV), vec4(2.2));
+	outColor = inColor * texture(fontSampler, inUV);
 }
