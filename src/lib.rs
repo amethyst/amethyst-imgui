@@ -24,6 +24,8 @@ use derivative::Derivative;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::sync::{Arc, Mutex};
 
+pub type ImguiStatePtr = Arc<Mutex<ImguiState>>;
+
 pub struct ImguiState {
 	pub context: imgui::Context,
 	pub textures: Vec<Handle<Texture>>,
