@@ -6,6 +6,7 @@ pub use imgui;
 pub use pass::DrawImguiDesc;
 
 use amethyst::{
+	assets::Handle,
 	core::SystemDesc,
 	ecs::{DispatcherBuilder, Read, ReadExpect, System, SystemData, World, Write},
 	error::Error,
@@ -14,6 +15,7 @@ use amethyst::{
 		bundle::{RenderOrder, RenderPlan, RenderPlugin, Target},
 		rendy::{factory::Factory, graph::render::RenderGroupDesc},
 		types::Backend,
+		Texture,
 	},
 	shrev::{EventChannel, ReaderId},
 	window::Window,
@@ -23,8 +25,13 @@ use derivative::Derivative;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::sync::{Arc, Mutex};
 
-pub struct ImguiContextWrapper(pub imgui::Context);
-unsafe impl Send for ImguiContextWrapper {}
+pub type ImguiStatePtr = Arc<Mutex<ImguiState>>;
+
+pub struct ImguiState {
+	pub context: imgui::Context,
+	pub textures: Vec<Handle<Texture>>,
+}
+unsafe impl Send for ImguiState {}
 
 pub struct FilteredInputEvent<T: BindingTypes>(pub InputEvent<T>);
 
@@ -34,14 +41,15 @@ pub struct ImguiInputSystem<T: BindingTypes> {
 }
 impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
 	type SystemData = (
-		ReadExpect<'s, Arc<Mutex<ImguiContextWrapper>>>,
+		ReadExpect<'s, Arc<Mutex<ImguiState>>>,
 		Read<'s, EventChannel<InputEvent<T>>>,
 		Read<'s, EventChannel<Event>>,
 		Write<'s, EventChannel<FilteredInputEvent<T>>>,
 	);
 
-	fn run(&mut self, (context, input_events, winit_events, mut filtered_events): Self::SystemData) {
-		let state = &mut context.lock().unwrap().0;
+	fn run(&mut self, (state_mutex, input_events, winit_events, mut filtered_events): Self::SystemData) {
+		let state = &mut state_mutex.lock().unwrap();
+		let context = &mut state.context;
 
 		for _ in winit_events.read(&mut self.winit_reader) {
 			//platform.handle_event(state.io_mut(), &window, &event);
@@ -52,12 +60,12 @@ impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
 				InputEvent::MouseButtonPressed(_) |
 				InputEvent::MouseButtonReleased(_) |
 				InputEvent::MouseWheelMoved(_) => {
-					if !state.io().want_capture_mouse {
+					if !context.io().want_capture_mouse {
 						filtered_events.single_write(FilteredInputEvent(input.clone()));
 					}
 				},
 				InputEvent::KeyPressed { .. } | InputEvent::KeyReleased { .. } => {
-					if !state.io().want_capture_keyboard {
+					if !context.io().want_capture_keyboard {
 						filtered_events.single_write(FilteredInputEvent(input.clone()));
 					}
 				},
@@ -102,7 +110,10 @@ impl<'a, 'b, T: BindingTypes> SystemDesc<'a, 'b, ImguiInputSystem<T>> for ImguiI
 		let mut platform = WinitPlatform::init(&mut context);
 		platform.attach_window(context.io_mut(), &world.fetch::<Window>(), HiDpiMode::Default);
 
-		world.insert(Arc::new(Mutex::new(ImguiContextWrapper(context))));
+		world.insert(Arc::new(Mutex::new(ImguiState {
+			context,
+			textures: Vec::default(),
+		})));
 		world.insert(platform);
 
 		ImguiInputSystem {

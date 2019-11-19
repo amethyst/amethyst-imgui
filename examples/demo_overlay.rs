@@ -32,7 +32,7 @@ impl Default for DemoSystem {
 }
 
 impl<'s> amethyst::ecs::System<'s> for DemoSystem {
-	type SystemData = (ReadExpect<'s, Arc<Mutex<amethyst_imgui::ImguiContextWrapper>>>,);
+	type SystemData = (ReadExpect<'s, Arc<Mutex<amethyst_imgui::ImguiState>>>,);
 
 	fn run(&mut self, (context,): Self::SystemData) {
 		let imgui = &mut context.lock().unwrap().0;
