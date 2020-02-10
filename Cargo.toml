@@ -1,6 +1,6 @@
 [package]
 name = "amethyst-imgui"
-version = "0.6.0"
+version = "0.6.1"
 description = "imgui library for amethyst"
 license = "CC0-1.0"
 authors = ["Awpteamoose <cargo@awpteamoose.my.to>", "Walter Pearce <jaynus@gmail.com>"]
@@ -16,7 +16,7 @@ docking = []
 [dependencies]
 imgui = { version = "0.2" }
 imgui-winit-support = { version = "0.2" }
-amethyst = { version = "0.13" }
+amethyst = { version = "0.14" }
 
 # Development dependencies
 #amethyst = { path = "../amethyst", features = ["saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }

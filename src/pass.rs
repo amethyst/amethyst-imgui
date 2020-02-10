@@ -85,17 +85,17 @@ lazy_static::lazy_static! {
 
 #[cfg(not(feature = "shader-compiler"))]
 lazy_static::lazy_static! {
-  static ref VERTEX: SpirvShader = SpirvShader::new(
-	include_bytes!("../compiled/imgui.vert.spv").to_vec(),
+  static ref VERTEX: SpirvShader = SpirvShader::from_bytes(
+	include_bytes!("../compiled/imgui.vert.spv"),
 	pso::ShaderStageFlags::VERTEX,
 	"main",
-  );
+  ).unwrap();
 
-  static ref FRAGMENT: SpirvShader = SpirvShader::new(
-	include_bytes!("../compiled/imgui.frag.spv").to_vec(),
+  static ref FRAGMENT: SpirvShader = SpirvShader::from_bytes(
+	include_bytes!("../compiled/imgui.frag.spv"),
 	pso::ShaderStageFlags::FRAGMENT,
 	"main",
-  );
+  ).unwrap();
 }
 
 lazy_static::lazy_static! {
@@ -220,6 +220,7 @@ impl DrawImguiDesc {
 				},
 				comparison: None,
 				border: PackedColor(0),
+				normalized: true,
 				anisotropic: Anisotropic::Off,
 			})
 			.with_raw_data(Cow::Owned(data), Format::Rgba8Unorm);
@@ -539,8 +540,11 @@ fn build_imgui_pipeline<B: Backend>(
 					scissor: None,
 					..Default::default()
 				})
-				.with_blend_targets(vec![pso::ColorBlendDesc(pso::ColorMask::ALL, pso::BlendState::ALPHA)])
-				.with_depth_test(pso::DepthTest::Off),
+				.with_blend_targets(vec![pso::ColorBlendDesc { 
+					mask:  pso::ColorMask::ALL, 
+					blend: Some(pso::BlendState::ALPHA) 
+				}])
+				.with_depth_test(pso::DepthTest::PASS_TEST),
 		)
 		.build(factory, None);
 

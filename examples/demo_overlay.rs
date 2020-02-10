@@ -35,8 +35,8 @@ impl<'s> amethyst::ecs::System<'s> for DemoSystem {
 	type SystemData = (ReadExpect<'s, Arc<Mutex<amethyst_imgui::ImguiState>>>,);
 
 	fn run(&mut self, (context,): Self::SystemData) {
-		let imgui = &mut context.lock().unwrap().0;
-		let io = imgui.io();
+		let ctx = &mut context.lock().unwrap().context;
+		let io = ctx.io();
 
 		let mut corner = self.corner;
 		let mut open = self.open;
@@ -124,7 +124,7 @@ fn main() -> amethyst::Result<()> {
 		.with_bundle(InputBundle::<StringBindings>::default())?
 		.with_bundle(
 			RenderingBundle::<DefaultBackend>::new()
-				.with_plugin(RenderToWindow::from_config_path(display_config_path).with_clear([0.34, 0.36, 0.52, 1.0]))
+				.with_plugin(RenderToWindow::from_config_path(display_config_path)?.with_clear([0.34, 0.36, 0.52, 1.0]))
 				.with_plugin(RenderImgui::<StringBindings>::default()),
 		)?;
 
