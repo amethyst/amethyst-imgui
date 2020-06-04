@@ -1,6 +1,6 @@
 [package]
 name = "amethyst-imgui"
-version = "0.6.1"
+version = "0.7.0"
 description = "imgui library for amethyst"
 license = "CC0-1.0"
 authors = ["Awpteamoose <cargo@awpteamoose.my.to>", "Walter Pearce <jaynus@gmail.com>"]
@@ -9,14 +9,16 @@ readme = "README.md"
 edition = "2018"
 
 [features]
-default = ["amethyst/vulkan"]
+vulkan = ["amethyst/vulkan"]
+metal = ["amethyst/metal"]
+empty = ["amethyst/empty"]
 shader-compiler = ["amethyst/shader-compiler"]
 docking = []
 
 [dependencies]
 imgui = { version = "0.2" }
 imgui-winit-support = { version = "0.2" }
-amethyst = { version = "0.14" }
+amethyst = { version = "0.15" }
 
 # Development dependencies
 #amethyst = { path = "../amethyst", features = ["saveload", "vulkan", "gltf", "experimental-spirv-reflection", "shader-compiler", "tiles"] }

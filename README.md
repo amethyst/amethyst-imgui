@@ -14,10 +14,13 @@ This crate provides an amethyst `RenderPlugin` (available since amethyst 0.12) w
 A minimal example is available at [examples/demo_window.rs](examples/demo_window.rs)
 
 ```
-cargo run --example demo_window --features amethyst/vulkan
+# For Windows/Linux:
+cargo run --example demo_window --features vulkan
+# For MacOS:
+cargo run --example demo_window --features metal
 ```
 
-## Usage 
+## Usage
 
 This crate currently requires including the amethyst crate; this may introduce a full recompilation of amethyst due to differing features. If this is the case, you'll need to clone this git repository and and set the appropriate features.
 
@@ -25,7 +28,7 @@ This create uses the amethyst `shader-compiler`, which relies on `shaderc` to co
 
 Example Cargo.toml Usage:
 ```toml
-amethyst-imgui = "0.5"
+amethyst-imgui = { version = "0.7", features = ["vulkan"] }
 ```
 
 
