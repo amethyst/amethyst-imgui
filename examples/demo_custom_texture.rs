@@ -45,6 +45,7 @@ impl<'a, 'b> SystemDesc<'a, 'b, DemoSystem> for DemoSystemDesc {
 		let texture_builder = load_from_image(
 			image_reader,
 			image::ImageTextureConfig {
+				repr: image::Repr::Unorm,
 				generate_mips: true,
 				..Default::default()
 			},
