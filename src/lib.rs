@@ -19,7 +19,7 @@ use amethyst::{
 	},
 	shrev::{EventChannel, ReaderId},
 	window::Window,
-	winit::Event,
+	winit::{Event, WindowEvent},
 };
 use derivative::Derivative;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
@@ -51,8 +51,16 @@ impl<'s, T: BindingTypes> System<'s> for ImguiInputSystem<T> {
 		let state = &mut state_mutex.lock().unwrap();
 		let context = &mut state.context;
 
-		for _ in winit_events.read(&mut self.winit_reader) {
-			//platform.handle_event(state.io_mut(), &window, &event);
+		for event in winit_events.read(&mut self.winit_reader) {
+			match event {
+				Event::WindowEvent {
+					event: WindowEvent::Resized(size),
+					..
+				} => {
+					context.io_mut().display_size = [size.width as f32, size.height as f32];
+				},
+				_ => {},
+			}
 		}
 		for input in input_events.read(&mut self.input_reader) {
 			match input {
